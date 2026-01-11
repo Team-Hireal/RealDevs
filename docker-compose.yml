@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: realdevs-api
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=development
+      - HIDEVS_SECRET_KEY=dev-secret-key-change-in-production
+      - DATABASE_URL=sqlite:///./data/realdevs.db
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./apps/api:/app
+      - api-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: realdevs-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  api-data:
+    driver: local
+

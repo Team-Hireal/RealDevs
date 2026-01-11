@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Black and white base */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 100%;
+    
+    /* Accent color (default: blue) - will be overridden by theme */
+    --accent: 210 100% 50%;
+    --primary: var(--accent);
+    --primary-foreground: 0 0% 0%;
+    --ring: var(--accent);
+    
+    /* Grayscale secondary colors */
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 60%;
+    --accent-foreground: 0 0% 100%;
+    
+    /* Destructive stays red */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    /* Borders and inputs */
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  
+  .glass-card {
+    @apply glass rounded-lg shadow-xl;
+  }
+  
+  .accent-text {
+    color: hsl(var(--accent));
+  }
+  
+  .glow {
+    box-shadow: 0 0 20px hsl(var(--accent) / 0.3);
+  }
+  
+  .glow-sm {
+    box-shadow: 0 0 10px hsl(var(--accent) / 0.2);
+  }
+  
+  .accent-border {
+    border-color: hsl(var(--accent) / 0.3);
+  }
+  
+  .accent-bg {
+    background-color: hsl(var(--accent) / 0.1);
+  }
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
