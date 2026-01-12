@@ -7,6 +7,7 @@ from app.utils.github_client import GitHubClient
 from app.services.auth_service import AuthService
 from collections import defaultdict
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -163,9 +164,9 @@ class SyncService:
                     total_issues += len(issues)
                     
                     # Process data
-                    SyncService._process_commits(repo, commits, since, until)
-                    SyncService._process_prs(repo, prs, since, until)
-                    SyncService._process_issues(repo, issues, since, until)
+                    SyncService._process_commits(repo, commits, since, until, client)
+                    SyncService._process_prs(repo, prs, since, until, client)
+                    SyncService._process_issues(repo, issues, since, until, client)
                     
                     # Update last synced
                     repo.last_synced_at = datetime.now(timezone.utc)
@@ -203,7 +204,90 @@ class SyncService:
         return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
     
     @staticmethod
-    def _process_commits(repo: Repository, commits: List[Dict], since: datetime, until: datetime):
+    def _extract_social_links(user_data: Dict) -> Dict[str, Optional[str]]:
+        """Extract social links from GitHub user profile data.
+        
+        Returns dict with linkedin_url, twitter_url, website_url.
+        """
+        links = {
+            'linkedin_url': None,
+            'twitter_url': None,
+            'website_url': None
+        }
+        
+        # Extract website/blog URL
+        blog = user_data.get('blog')
+        if blog:
+            # Normalize URL (add https:// if missing)
+            if not blog.startswith(('http://', 'https://')):
+                blog = f'https://{blog}'
+            links['website_url'] = blog
+        
+        # Extract Twitter handle
+        twitter_username = user_data.get('twitter_username')
+        if twitter_username:
+            # Remove @ if present and construct URL
+            username = twitter_username.lstrip('@')
+            links['twitter_url'] = f'https://twitter.com/{username}'
+        
+        # Extract LinkedIn from bio or blog
+        bio = user_data.get('bio', '')
+        blog_url = user_data.get('blog', '')
+        
+        # Check bio for LinkedIn patterns
+        linkedin_patterns = [
+            r'linkedin\.com/in/([a-zA-Z0-9\-]+)',
+            r'in/([a-zA-Z0-9\-]+)',  # Short form like "in/simon-tian-1333a3156"
+        ]
+        
+        for pattern in linkedin_patterns:
+            match = re.search(pattern, bio, re.IGNORECASE)
+            if match:
+                linkedin_id = match.group(1)
+                links['linkedin_url'] = f'https://www.linkedin.com/in/{linkedin_id}'
+                break
+        
+        # Also check blog URL for LinkedIn
+        if not links['linkedin_url']:
+            for pattern in linkedin_patterns:
+                match = re.search(pattern, blog_url, re.IGNORECASE)
+                if match:
+                    linkedin_id = match.group(1)
+                    links['linkedin_url'] = f'https://www.linkedin.com/in/{linkedin_id}'
+                    break
+        
+        return links
+    
+    @staticmethod
+    def _update_contributor_profile(contributor: Contributor, client: GitHubClient):
+        """Fetch and update contributor profile with social links."""
+        try:
+            user_data = client.get_user(contributor.login)
+            if not user_data:
+                return
+            
+            # Extract social links
+            links = SyncService._extract_social_links(user_data)
+            
+            # Update contributor with profile data
+            if user_data.get('name') and not contributor.name:
+                contributor.name = user_data.get('name')
+            if user_data.get('avatar_url') and not contributor.avatar_url:
+                contributor.avatar_url = user_data.get('avatar_url')
+            
+            # Update social links (only if not already set, to avoid overwriting manual updates)
+            if links['linkedin_url'] and not contributor.linkedin_url:
+                contributor.linkedin_url = links['linkedin_url']
+            if links['twitter_url'] and not contributor.twitter_url:
+                contributor.twitter_url = links['twitter_url']
+            if links['website_url'] and not contributor.website_url:
+                contributor.website_url = links['website_url']
+            
+        except Exception as e:
+            logger.debug(f"Error updating profile for {contributor.login}: {e}")
+    
+    @staticmethod
+    def _process_commits(repo: Repository, commits: List[Dict], since: datetime, until: datetime, client: GitHubClient):
         """Process commits and aggregate by contributor and day."""
         # Group by contributor and date
         commit_counts = defaultdict(lambda: defaultdict(int))
@@ -261,6 +345,8 @@ class SyncService:
                 )
                 db.session.add(contributor)
                 db.session.flush()
+                # Fetch user profile data for new contributors
+                SyncService._update_contributor_profile(contributor, client)
             
             commit_counts[contributor.id][day] += 1
         
@@ -289,7 +375,7 @@ class SyncService:
                     stat.commits_count = count
     
     @staticmethod
-    def _process_prs(repo: Repository, prs: List[Dict], since: datetime, until: datetime):
+    def _process_prs(repo: Repository, prs: List[Dict], since: datetime, until: datetime, client: GitHubClient):
         """Process pull requests."""
         pr_opened = defaultdict(lambda: defaultdict(int))
         pr_merged = defaultdict(lambda: defaultdict(int))
@@ -320,6 +406,8 @@ class SyncService:
                 )
                 db.session.add(contributor)
                 db.session.flush()
+                # Fetch user profile data for new contributors
+                SyncService._update_contributor_profile(contributor, client)
             
             # Count opened PRs
             if pr.get('created_at'):
@@ -379,7 +467,7 @@ class SyncService:
                     db.session.add(stat)
     
     @staticmethod
-    def _process_issues(repo: Repository, issues: List[Dict], since: datetime, until: datetime):
+    def _process_issues(repo: Repository, issues: List[Dict], since: datetime, until: datetime, client: GitHubClient):
         """Process closed issues."""
         issues_closed = defaultdict(lambda: defaultdict(int))
         
@@ -413,6 +501,8 @@ class SyncService:
                 )
                 db.session.add(contributor)
                 db.session.flush()
+                # Fetch user profile data for new contributors
+                SyncService._update_contributor_profile(contributor, client)
             
             day = closed_date.date()
             issues_closed[contributor.id][day] += 1

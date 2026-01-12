@@ -30,6 +30,9 @@ export interface Contributor {
   prs_merged: number;
   issues_closed: number;
   average_trend: number;
+  linkedin_url?: string;
+  twitter_url?: string;
+  website_url?: string;
 }
 
 export interface TeamSummary {

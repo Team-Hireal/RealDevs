@@ -153,6 +153,22 @@ class GitHubClient:
         url = f"{self.base_url}/users/{username}/events"
         return self._get_paginated(url, params, max_pages=3)  # Limit to recent activity
     
+    def get_user(self, username: str) -> Optional[Dict]:
+        """Get user profile information including social links."""
+        try:
+            response = self.client.get(f"{self.base_url}/users/{username}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                logger.debug(f"User {username} not found")
+            else:
+                logger.warning(f"HTTP error fetching user {username}: {e}")
+            return None
+        except Exception as e:
+            logger.debug(f"Error fetching user {username}: {e}")
+            return None
+    
     def search_commits(self, author: str, since: Optional[datetime] = None, until: Optional[datetime] = None) -> List[Dict]:
         """Search commits by author across all public repos they have access to.
         

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
 import { useTheme } from "@/contexts/theme-context";
+import { Contributor } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,10 @@ import {
   Calendar,
   ExternalLink,
   Loader2,
-  BarChart3
+  BarChart3,
+  Linkedin,
+  Twitter,
+  Globe
 } from "lucide-react";
 
 // GitHub Icon Component
@@ -138,9 +142,12 @@ export default function DashboardPage() {
   const topContributor = dashboardData?.contributors
     ?.sort((a, b) => b.average_trend - a.average_trend)[0];
 
-  const selectedContributorData = useMemo(() => {
+  const selectedContributorData = useMemo((): Contributor | null => {
     if (!selectedContributor || !dashboardData?.contributors) return null;
-    return dashboardData.contributors.find(c => c.login === selectedContributor);
+    const contributor = dashboardData.contributors.find(c => c.login === selectedContributor);
+    if (!contributor) return null;
+    // Type assertion to ensure all optional properties are available
+    return contributor as Contributor;
   }, [selectedContributor, dashboardData?.contributors]);
 
   const sortedContributors = useMemo(() => {
@@ -151,10 +158,18 @@ export default function DashboardPage() {
   // Computed metrics that switch between team and individual contributor data
   const displayMetrics = useMemo(() => {
     if (selectedContributorData) {
-      // Calculate individual contributor's internal/external split
-      const totalCommits = selectedContributorData.commits;
-      const internalPercentage = selectedContributorData.is_internal ? 100 : 0;
-      const externalPercentage = selectedContributorData.is_internal ? 0 : 100;
+      // Use internal_external_split from dailyCommitsData for accurate individual contributor split
+      const split = dailyCommitsData?.internal_external_split || [];
+      const internalData = split.find(s => s.category === "Internal");
+      const externalData = split.find(s => s.category === "External");
+      const totalCommits = (internalData?.count || 0) + (externalData?.count || 0);
+      
+      const internalPercentage = totalCommits > 0 
+        ? ((internalData?.count || 0) / totalCommits) * 100 
+        : 0;
+      const externalPercentage = totalCommits > 0 
+        ? ((externalData?.count || 0) / totalCommits) * 100 
+        : 0;
       
       return {
         totalCommits: selectedContributorData.commits,
@@ -173,7 +188,7 @@ export default function DashboardPage() {
       externalPercentage: dashboardData?.team_summary.external_percentage || 0,
       isIndividual: false,
     };
-  }, [selectedContributorData, dashboardData]);
+  }, [selectedContributorData, dashboardData, dailyCommitsData]);
 
   // Filter risk flags for selected contributor
   const displayRiskFlags = useMemo(() => {
@@ -298,8 +313,12 @@ export default function DashboardPage() {
       return null;
     }
     
-    // Sort by value (commit count) descending - most to least
-    const sorted = [...dailyCommitsData.repo_contributions].sort((a, b) => b.value - a.value);
+    // Separate internal and external repos
+    const internalRepos = dailyCommitsData.repo_contributions.filter(r => r.type === 'internal');
+    const externalRepos = dailyCommitsData.repo_contributions.filter(r => r.type === 'external');
+    
+    // Aggregate external repos into a single "External" entry
+    const totalExternalCommits = externalRepos.reduce((sum, repo) => sum + repo.value, 0);
     
     // Get accent color HSL values
     const baseHsl = getAccentColorHsl();
@@ -307,15 +326,13 @@ export default function DashboardPage() {
     const baseSaturation = parseInt(baseHsl.split(' ')[1].replace('%', ''));
     const baseLightness = baseHsl.split(' ')[2];
     
-    // Add color information to each entry
-    // Use same hue (accent color) for all, vary only saturation to distinguish
-    return sorted.map((entry, index) => {
-      // Vary saturation smoothly between 50% and 75% to create distinction
-      // More commits = higher saturation (more vibrant)
-      // Fewer commits = lower saturation (less vibrant)
-      const totalRepos = sorted.length;
+    // Sort internal repos by value (commit count) descending
+    const sortedInternal = [...internalRepos].sort((a, b) => b.value - a.value);
+    
+    // Add color information to internal repos
+    const coloredInternal = sortedInternal.map((entry, index) => {
+      const totalRepos = sortedInternal.length;
       if (totalRepos === 1) {
-        // Single repo uses base saturation
         return {
           ...entry,
           hue: baseHue,
@@ -330,11 +347,27 @@ export default function DashboardPage() {
       
       return {
         ...entry,
-        hue: baseHue, // Same hue for all - accent color
+        hue: baseHue,
         saturation: `${Math.round(saturation)}%`,
         lightness: baseLightness,
       };
     });
+    
+    // Add aggregated External entry with grey color
+    const result = [...coloredInternal];
+    if (totalExternalCommits > 0) {
+      result.push({
+        name: "External",
+        value: totalExternalCommits,
+        type: "external" as const,
+        hue: 0, // Grey hue
+        saturation: "0%", // No saturation for grey
+        lightness: "50%", // Medium grey
+      });
+    }
+    
+    // Sort by value descending (External will be included in sort)
+    return result.sort((a, b) => b.value - a.value);
   }, [dailyCommitsData, accentColor]);
 
   if (isLoading) {
@@ -774,8 +807,12 @@ export default function DashboardPage() {
                               if (active && payload && payload.length > 0) {
                                 const data = payload[0].payload;
                                 const repoName = data?.name || '';
-                                // Extract repo name (remove organization prefix if present)
-                                const displayName = repoName.includes('/') ? repoName.split('/')[1] : repoName;
+                                // Handle "External" category specially, otherwise extract repo name
+                                const displayName = repoName === "External" 
+                                  ? "External" 
+                                  : repoName.includes('/') 
+                                    ? repoName.split('/')[1] 
+                                    : repoName;
                                 const value = payload[0].value as number;
                                 
                                 return (
@@ -800,8 +837,12 @@ export default function DashboardPage() {
                     <div className="flex-1 space-y-2 max-h-[200px] overflow-y-auto">
                       {sortedRepoContributions.map((entry, index) => {
                         const color = `hsl(${entry.hue} ${entry.saturation} ${entry.lightness})`;
-                        // Extract repo name (remove organization prefix if present)
-                        const repoName = entry.name.includes('/') ? entry.name.split('/')[1] : entry.name;
+                        // Handle "External" category specially, otherwise extract repo name
+                        const displayName = entry.name === "External"
+                          ? "External"
+                          : entry.name.includes('/') 
+                            ? entry.name.split('/')[1] 
+                            : entry.name;
                         
                         return (
                           <div key={index} className="flex items-center justify-between p-2 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
@@ -811,7 +852,7 @@ export default function DashboardPage() {
                                 style={{ backgroundColor: color }}
                               />
                               <span className="text-sm truncate">
-                                {repoName}
+                                {displayName}
                               </span>
                             </div>
                             <span className="text-sm font-semibold accent-text ml-2">
@@ -901,21 +942,70 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      asChild
-                      className="shrink-0"
-                    >
-                      <a
-                        href={`https://github.com/${selectedContributorData.login}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`View ${selectedContributorData.login} on GitHub`}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        asChild
                       >
-                        <GitHubIcon className="w-5 h-5" />
-                      </a>
-                    </Button>
+                        <a
+                          href={`https://github.com/${selectedContributorData.login}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`View ${selectedContributorData.login} on GitHub`}
+                        >
+                          <GitHubIcon className="w-5 h-5" />
+                        </a>
+                      </Button>
+                      {selectedContributorData.linkedin_url && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          asChild
+                        >
+                          <a
+                            href={selectedContributorData.linkedin_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`View ${selectedContributorData.login} on LinkedIn`}
+                          >
+                            <Linkedin className="w-5 h-5" />
+                          </a>
+                        </Button>
+                      )}
+                      {selectedContributorData.twitter_url && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          asChild
+                        >
+                          <a
+                            href={selectedContributorData.twitter_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`View ${selectedContributorData.login} on Twitter`}
+                          >
+                            <Twitter className="w-5 h-5" />
+                          </a>
+                        </Button>
+                      )}
+                      {selectedContributorData.website_url && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          asChild
+                        >
+                          <a
+                            href={selectedContributorData.website_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Visit ${selectedContributorData.login}'s website`}
+                          >
+                            <Globe className="w-5 h-5" />
+                          </a>
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Contributor Metrics Grid */}

@@ -51,6 +51,9 @@ class Contributor(db.Model):
     avatar_url = Column(String(512), nullable=True)
     is_team_member = Column(Boolean, default=False)  # Marked by user as internal team
     repo_id = Column(Integer, ForeignKey('repositories.id'), nullable=False)
+    linkedin_url = Column(String(512), nullable=True)
+    twitter_url = Column(String(512), nullable=True)
+    website_url = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     

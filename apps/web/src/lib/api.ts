@@ -73,6 +73,9 @@ export interface DashboardData {
     prs_merged: number
     issues_closed: number
     average_trend: number
+    linkedin_url?: string
+    twitter_url?: string
+    website_url?: string
   }>
   last_synced: string | null
   range_days: number

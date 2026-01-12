@@ -413,11 +413,43 @@ class MetricsService:
         # Build result
         results = []
         
+        # Fetch social links for all contributors (get from any contributor record with matching github_id)
+        contributor_logins = [metrics["login"] for metrics in user_stats.values()]
+        contributors_with_links = Contributor.query.filter(
+            Contributor.github_id.in_(list(user_stats.keys()))
+        ).all()
+        
+        # Create a map of github_id to social links (use first non-null value found)
+        social_links_map = {}
+        for contrib in contributors_with_links:
+            if contrib.github_id not in social_links_map:
+                social_links_map[contrib.github_id] = {
+                    "linkedin_url": contrib.linkedin_url,
+                    "twitter_url": contrib.twitter_url,
+                    "website_url": contrib.website_url
+                }
+            else:
+                # Update with non-null values
+                existing = social_links_map[contrib.github_id]
+                if not existing["linkedin_url"] and contrib.linkedin_url:
+                    existing["linkedin_url"] = contrib.linkedin_url
+                if not existing["twitter_url"] and contrib.twitter_url:
+                    existing["twitter_url"] = contrib.twitter_url
+                if not existing["website_url"] and contrib.website_url:
+                    existing["website_url"] = contrib.website_url
+        
         for github_id, metrics in user_stats.items():
             # Calculate average trend using least squares regression
             sorted_dates = sorted(metrics["daily_scores"].keys())
             daily_scores = [metrics["daily_scores"][date] for date in sorted_dates]
             average_trend = MetricsService._calculate_trendline_slope(daily_scores)
+            
+            # Get social links for this contributor
+            social_links = social_links_map.get(github_id, {
+                "linkedin_url": None,
+                "twitter_url": None,
+                "website_url": None
+            })
             
             results.append({
                 "login": metrics["login"],
@@ -428,7 +460,10 @@ class MetricsService:
                 "prs_opened": metrics["prs_opened"],
                 "prs_merged": metrics["prs_merged"],
                 "issues_closed": metrics["issues_closed"],
-                "average_trend": round(average_trend, 2)
+                "average_trend": round(average_trend, 2),
+                "linkedin_url": social_links["linkedin_url"],
+                "twitter_url": social_links["twitter_url"],
+                "website_url": social_links["website_url"]
             })
         
         # Sort by average trend (descending)
