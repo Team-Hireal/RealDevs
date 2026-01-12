@@ -115,7 +115,7 @@ def get_selected_repos():
 
 @api_bp.route('/sync', methods=['POST'])
 def sync_repos():
-    """Sync selected repos."""
+    """Sync selected repos and external commits."""
     try:
         data = request.get_json() or {}
         range_days_param = data.get('range_days', 7)
@@ -125,7 +125,20 @@ def sync_repos():
         else:
             range_days = int(range_days_param)
         
+        # Sync internal repos
         result = SyncService.sync_repos(range_days=range_days)
+        
+        # Sync external commits
+        try:
+            external_result = SyncService.sync_external_commits(range_days=range_days)
+            result["external_commits"] = external_result
+        except Exception as e:
+            logger.error(f"Error syncing external commits: {e}", exc_info=True)
+            result["external_commits"] = {
+                "ok": False,
+                "error": str(e)
+            }
+        
         # Return 200 even if some repos failed, but include error info
         status_code = 200 if result.get("ok") or result.get("synced_repos") else 400
         return jsonify(result), status_code
@@ -137,18 +150,28 @@ def sync_repos():
 @api_bp.route('/diagnostics', methods=['GET'])
 def diagnostics():
     """Get diagnostic information about the current state."""
-    from app.models import Repository, Contributor, DailyStats, AuthToken, TeamMember
+    from app.models import Repository, Contributor, DailyStats, AuthToken, TeamMember, ExternalCommit
     
     repos = Repository.query.all()
     contributors = Contributor.query.all()
     stats = DailyStats.query.all()
     auth = AuthToken.query.first()
     team_members = TeamMember.query.filter_by(is_active=True).all()
+    external_commits = ExternalCommit.query.all()
     
     # Get recent stats
     from datetime import datetime, timedelta, timezone
     week_ago = datetime.now(timezone.utc) - timedelta(days=7)
     recent_stats = DailyStats.query.filter(DailyStats.date >= week_ago).all()
+    recent_external = ExternalCommit.query.filter(ExternalCommit.commit_date >= week_ago).all()
+    
+    # Group external commits by repo
+    external_by_repo = {}
+    for ext_commit in external_commits:
+        repo_name = ext_commit.repo_full_name
+        if repo_name not in external_by_repo:
+            external_by_repo[repo_name] = 0
+        external_by_repo[repo_name] += 1
     
     return jsonify({
         "pat_configured": auth is not None,
@@ -165,6 +188,11 @@ def diagnostics():
         "daily_stats_count": len(stats),
         "recent_stats_count": len(recent_stats),
         "team_members_count": len(team_members),
+        "team_members": [tm.github_login for tm in team_members],
+        "external_commits_total": len(external_commits),
+        "external_commits_recent": len(recent_external),
+        "external_repos_count": len(external_by_repo),
+        "external_repos": list(external_by_repo.keys())[:10],  # Show up to 10
         "ready_to_sync": len(repos) > 0 and auth is not None
     })
 

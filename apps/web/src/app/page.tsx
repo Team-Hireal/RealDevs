@@ -238,6 +238,52 @@ export default function DashboardPage() {
     return accentColors[accentColor] || accentColors.gold;
   };
 
+  // Process daily commits data to fill in missing dates
+  const processedDailyCommits = useMemo(() => {
+    if (!dailyCommitsData?.daily_commits || dailyCommitsData.daily_commits.length === 0) {
+      return null;
+    }
+
+    const commits = dailyCommitsData.daily_commits;
+    
+    // Create a map of existing dates
+    const commitMap = new Map(
+      commits.map(c => [c.date, c.commits])
+    );
+
+    // Determine the date range
+    let startDate: Date;
+    let endDate: Date = new Date();
+    endDate.setHours(0, 0, 0, 0);
+
+    if (rangeDays === null) {
+      // For "All time", use the earliest commit date
+      const dates = commits.map(c => new Date(c.date));
+      startDate = new Date(Math.min(...dates.map(d => d.getTime())));
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      // For specific ranges, use rangeDays
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - rangeDays + 1);
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    // Fill in all dates in the range
+    const filledData: Array<{ date: string; commits: number }> = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      filledData.push({
+        date: dateStr,
+        commits: commitMap.get(dateStr) || 0
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return filledData;
+  }, [dailyCommitsData, rangeDays]);
+
   // Prepare pie chart data for contribution split
   const pieChartData = useMemo(() => {
     return [
@@ -400,10 +446,10 @@ export default function DashboardPage() {
                   {displayMetrics.totalCommits}
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">Commits</p>
-                {dailyCommitsData?.daily_commits && dailyCommitsData.daily_commits.length > 0 ? (
+                {processedDailyCommits && processedDailyCommits.length > 0 ? (
                   <div className="flex-1 min-h-[120px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={dailyCommitsData.daily_commits}>
+                      <AreaChart data={processedDailyCommits}>
                         <defs>
                           <linearGradient id="commitGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor={`hsl(${getAccentColorHsl()} / 0.8)`} />
@@ -628,9 +674,9 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {dailyCommitsData?.daily_commits && dailyCommitsData.daily_commits.length > 0 ? (
+                {processedDailyCommits && processedDailyCommits.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={dailyCommitsData.daily_commits}>
+                    <BarChart data={processedDailyCommits}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis 
                         dataKey="date" 
@@ -690,9 +736,8 @@ export default function DashboardPage() {
               <CardContent>
                 {sortedRepoContributions && sortedRepoContributions.length > 0 ? (
                   <div className="flex items-start gap-6">
-                    <div className="shrink-0">
-                      <ResponsiveContainer width={200} height={200}>
-                        <PieChart>
+                    <div className="shrink-0" style={{ width: 200, height: 200 }}>
+                      <PieChart width={200} height={200}>
                           <defs>
                             {sortedRepoContributions.map((entry, index) => {
                               const opacity = 0.85;
@@ -751,7 +796,6 @@ export default function DashboardPage() {
                             }}
                           />
                         </PieChart>
-                      </ResponsiveContainer>
                     </div>
                     <div className="flex-1 space-y-2 max-h-[200px] overflow-y-auto">
                       {sortedRepoContributions.map((entry, index) => {

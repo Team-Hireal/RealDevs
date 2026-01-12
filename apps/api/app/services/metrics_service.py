@@ -1,7 +1,7 @@
 """Service for computing metrics and risk flags."""
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
-from app.models import Repository, Contributor, DailyStats, TeamMember, Settings
+from app.models import Repository, Contributor, DailyStats, TeamMember, Settings, ExternalCommit
 from sqlalchemy import func
 from collections import defaultdict
 import logging
@@ -228,7 +228,14 @@ class MetricsService:
         total_issues_closed = sum(u["issues_closed"] for u in user_stats.values())
         
         internal_commits = sum(u["commits"] for u in user_stats.values() if u["is_internal"])
-        external_commits = sum(u["commits"] for u in user_stats.values() if not u["is_internal"])
+        
+        # Get external commits from ExternalCommit table (commits by team members to non-tracked repos)
+        external_commit_count = ExternalCommit.query.filter(
+            ExternalCommit.commit_date >= since,
+            ExternalCommit.commit_date <= until
+        ).count()
+        
+        external_commits = external_commit_count
         
         # Calculate average trend using least squares regression
         weights = MetricsService.get_weights()
@@ -658,9 +665,8 @@ class MetricsService:
             else:
                 repo_breakdown[repo_full_name]["external"] += stat.commits_count
         
-        # Build repository contribution list
+        # Build repository contribution list (internal repos only)
         repo_contributions = []
-        total_external_commits = 0
         
         for repo_name, counts in sorted(repo_breakdown.items()):
             if counts["internal"] > 0:
@@ -669,13 +675,36 @@ class MetricsService:
                     "value": counts["internal"],
                     "type": "internal"
                 })
-            total_external_commits += counts["external"]
         
-        # Add external commitments as a separate category
-        if total_external_commits > 0:
+        # Get external commits from ExternalCommit table
+        external_commits_query = ExternalCommit.query.filter(
+            ExternalCommit.commit_date >= since,
+            ExternalCommit.commit_date <= until
+        )
+        
+        # If filtering by contributor, only show their external commits
+        if contributor_login:
+            external_commits_query = external_commits_query.filter_by(github_user_login=contributor_login)
+        else:
+            # Only show external commits from team members
+            team_logins = {tm.github_login for tm in TeamMember.query.filter_by(is_active=True).all()}
+            if team_logins:
+                external_commits_query = external_commits_query.filter(
+                    ExternalCommit.github_user_login.in_(team_logins)
+                )
+        
+        external_commits_list = external_commits_query.all()
+        
+        # Group external commits by repository
+        external_repo_breakdown = defaultdict(int)
+        for ext_commit in external_commits_list:
+            external_repo_breakdown[ext_commit.repo_full_name] += 1
+        
+        # Add external repos to contributions
+        for repo_name, count in sorted(external_repo_breakdown.items(), key=lambda x: x[1], reverse=True):
             repo_contributions.append({
-                "name": "External Commitments",
-                "value": total_external_commits,
+                "name": repo_name,
+                "value": count,
                 "type": "external"
             })
         

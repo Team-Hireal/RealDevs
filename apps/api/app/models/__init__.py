@@ -115,3 +115,19 @@ class Settings(db.Model):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+
+class ExternalCommit(db.Model):
+    """Stores commits made by team members to external (non-tracked) repositories."""
+    __tablename__ = 'external_commits'
+    
+    id = Column(Integer, primary_key=True)
+    github_user_login = Column(String(255), nullable=False, index=True)
+    github_user_id = Column(Integer, nullable=False, index=True)
+    repo_full_name = Column(String(255), nullable=False, index=True)
+    repo_owner = Column(String(255), nullable=False)
+    commit_sha = Column(String(40), unique=True, nullable=False, index=True)
+    commit_date = Column(DateTime, nullable=False, index=True)
+    commit_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+

@@ -2,7 +2,7 @@
 # https://github.com/SimonSaysGiveMeSmile
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
-from app.models import db, Repository, Contributor, DailyStats, TeamMember
+from app.models import db, Repository, Contributor, DailyStats, TeamMember, ExternalCommit
 from app.utils.github_client import GitHubClient
 from app.services.auth_service import AuthService
 from collections import defaultdict
@@ -438,4 +438,222 @@ class SyncService:
                         issues_closed=count
                     )
                     db.session.add(stat)
+    
+    @staticmethod
+    def sync_external_commits(range_days: int = 7) -> Dict:
+        """Sync external commits (commits by contributors to non-tracked repos).
+        
+        This function tracks ALL contributors to tracked repositories and fetches
+        their complete contribution history across GitHub, filtering out commits
+        to tracked repos to show only external work.
+        """
+        pat = AuthService.get_stored_pat()
+        if not pat:
+            raise ValueError("No PAT stored")
+        
+        # Get ALL unique contributors from tracked repositories
+        # This automatically includes everyone who has contributed to your projects
+        contributors = db.session.query(Contributor.github_id, Contributor.login).distinct().all()
+        
+        if not contributors:
+            logger.info("No contributors found in tracked repositories")
+            return {
+                "ok": True,
+                "message": "No contributors found - sync repositories first",
+                "external_commits_synced": 0
+            }
+        
+        # Also include manually configured team members if any
+        team_members = TeamMember.query.filter_by(is_active=True).all()
+        team_member_logins = {tm.github_login for tm in team_members}
+        
+        # Combine: all contributors + team members
+        all_users = {}
+        for github_id, login in contributors:
+            all_users[login] = github_id
+        for tm in team_members:
+            if tm.github_login not in all_users:
+                all_users[tm.github_login] = None  # We'll get github_id from events
+        
+        logger.info(f"Tracking {len(all_users)} user(s): {len(contributors)} from repos + {len(team_member_logins)} configured team members")
+        
+        # Get tracked repository full names
+        tracked_repos = Repository.query.all()
+        tracked_repo_names = {repo.full_name for repo in tracked_repos}
+        
+        until = datetime.now(timezone.utc)
+        since = until - timedelta(days=range_days)
+        
+        total_external_commits = 0
+        synced_members = []
+        failed_members = []
+        
+        logger.info(f"Starting external commit sync for {len(all_users)} contributor(s)")
+        
+        with GitHubClient(pat) as client:
+            for login, github_id in all_users.items():
+                try:
+                    logger.info(f"Fetching external commits for {login}...")
+                    
+                    # Method 1: Use GitHub Events API (recent activity, up to 300 events)
+                    events = client.get_user_events(login, per_page=100)
+                    
+                    # Method 2: Use GitHub Search API for comprehensive history
+                    # This searches ALL commits by the user across GitHub
+                    try:
+                        search_results = client.search_commits(login, since=since, until=until)
+                        logger.info(f"  Found {len(search_results)} commits via search for {login}")
+                    except Exception as e:
+                        logger.warning(f"  Search API failed for {login}: {e}")
+                        search_results = []
+                    
+                    commits_processed = 0
+                    
+                    # Process events first
+                    for event in events:
+                        # Only process PushEvents (commits)
+                        if event.get('type') != 'PushEvent':
+                            continue
+                        
+                        # Check event date
+                        created_at_str = event.get('created_at')
+                        if not created_at_str:
+                            continue
+                        
+                        event_date = SyncService._parse_github_date(created_at_str)
+                        if event_date < since or event_date > until:
+                            continue
+                        
+                        # Get repository info
+                        repo_info = event.get('repo', {})
+                        repo_full_name = repo_info.get('name')
+                        
+                        if not repo_full_name:
+                            continue
+                        
+                        # Skip if this is a tracked repo
+                        if repo_full_name in tracked_repo_names:
+                            continue
+                        
+                        # Extract repo owner
+                        repo_owner = repo_full_name.split('/')[0] if '/' in repo_full_name else ''
+                        
+                        # Process commits in the push event
+                        payload = event.get('payload', {})
+                        commits = payload.get('commits', [])
+                        
+                        for commit_data in commits:
+                            commit_sha = commit_data.get('sha')
+                            if not commit_sha:
+                                continue
+                            
+                            # Check if we already have this commit
+                            existing = ExternalCommit.query.filter_by(commit_sha=commit_sha).first()
+                            if existing:
+                                continue
+                            
+                            # Get github_user_id from the actor or use cached value
+                            actor = event.get('actor', {})
+                            user_github_id = actor.get('id') or github_id
+                            
+                            if not user_github_id:
+                                continue
+                            
+                            # Create external commit record
+                            external_commit = ExternalCommit(
+                                github_user_login=login,
+                                github_user_id=user_github_id,
+                                repo_full_name=repo_full_name,
+                                repo_owner=repo_owner,
+                                commit_sha=commit_sha,
+                                commit_date=event_date,
+                                commit_message=commit_data.get('message', '')[:500]  # Truncate long messages
+                            )
+                            db.session.add(external_commit)
+                            commits_processed += 1
+                            total_external_commits += 1
+                    
+                    # Process search results for more comprehensive coverage
+                    for commit_result in search_results:
+                        try:
+                            # Extract commit info from search result
+                            commit_sha = commit_result.get('sha')
+                            if not commit_sha:
+                                continue
+                            
+                            # Check if we already have this commit
+                            existing = ExternalCommit.query.filter_by(commit_sha=commit_sha).first()
+                            if existing:
+                                continue
+                            
+                            # Get repository info
+                            repo_info = commit_result.get('repository', {})
+                            repo_full_name = repo_info.get('full_name')
+                            
+                            if not repo_full_name or repo_full_name in tracked_repo_names:
+                                continue
+                            
+                            # Extract repo owner
+                            repo_owner = repo_full_name.split('/')[0] if '/' in repo_full_name else ''
+                            
+                            # Get commit date
+                            commit_info = commit_result.get('commit', {})
+                            author_info = commit_info.get('author', {})
+                            commit_date_str = author_info.get('date')
+                            
+                            if not commit_date_str:
+                                continue
+                            
+                            commit_date = SyncService._parse_github_date(commit_date_str)
+                            
+                            # Verify date is in range
+                            if commit_date < since or commit_date > until:
+                                continue
+                            
+                            # Get github_user_id - use cached or from commit author
+                            author = commit_result.get('author', {})
+                            user_github_id = author.get('id') or github_id
+                            
+                            if not user_github_id:
+                                continue
+                            
+                            # Create external commit record
+                            external_commit = ExternalCommit(
+                                github_user_login=login,
+                                github_user_id=user_github_id,
+                                repo_full_name=repo_full_name,
+                                repo_owner=repo_owner,
+                                commit_sha=commit_sha,
+                                commit_date=commit_date,
+                                commit_message=commit_info.get('message', '')[:500]
+                            )
+                            db.session.add(external_commit)
+                            commits_processed += 1
+                            total_external_commits += 1
+                            
+                        except Exception as e:
+                            logger.debug(f"Error processing search result for {login}: {e}")
+                            continue
+                    
+                    synced_members.append(login)
+                    logger.info(f"  Found {commits_processed} external commits for {login}")
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"Error syncing external commits for {login}: {error_msg}", exc_info=True)
+                    failed_members.append({
+                        "member": login,
+                        "error": error_msg
+                    })
+        
+        db.session.commit()
+        
+        logger.info(f"External commit sync completed: {len(synced_members)} successful, {len(failed_members)} failed, {total_external_commits} commits")
+        
+        return {
+            "ok": len(failed_members) == 0,
+            "synced_members": synced_members,
+            "failed_members": failed_members,
+            "external_commits_synced": total_external_commits
+        }
 

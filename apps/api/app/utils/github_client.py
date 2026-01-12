@@ -144,4 +144,68 @@ class GitHubClient:
         response = self.client.get(f"{self.base_url}/rate_limit")
         response.raise_for_status()
         return response.json()
+    
+    def get_user_events(self, username: str, per_page: int = 100) -> List[Dict]:
+        """Get recent events (activity) for a user."""
+        params = {
+            "per_page": per_page
+        }
+        url = f"{self.base_url}/users/{username}/events"
+        return self._get_paginated(url, params, max_pages=3)  # Limit to recent activity
+    
+    def search_commits(self, author: str, since: Optional[datetime] = None, until: Optional[datetime] = None) -> List[Dict]:
+        """Search commits by author across all public repos they have access to.
+        
+        Note: GitHub Search API requires a special Accept header and has lower rate limits.
+        Returns commits from all accessible repositories, not just owned ones.
+        """
+        query_parts = [f"author:{author}"]
+        
+        if since:
+            query_parts.append(f"author-date:>={since.strftime('%Y-%m-%d')}")
+        if until:
+            query_parts.append(f"author-date:<={until.strftime('%Y-%m-%d')}")
+        
+        query = " ".join(query_parts)
+        params = {
+            "q": query,
+            "sort": "author-date",
+            "order": "desc",
+            "per_page": 100
+        }
+        
+        url = f"{self.base_url}/search/commits"
+        
+        # Save original accept header and use search-specific one
+        original_accept = self.headers.get("Accept")
+        try:
+            # GitHub Search Commits API requires this specific Accept header
+            self.headers["Accept"] = "application/vnd.github.cloak-preview+json"
+            self.client.headers.update(self.headers)
+            
+            results = self._get_paginated(url, params, max_pages=5)  # Limit to 5 pages (500 commits) to respect rate limits
+            
+            # Extract items from search results
+            if results and isinstance(results[0], dict) and 'items' in results[0]:
+                all_items = []
+                for result in results:
+                    all_items.extend(result.get('items', []))
+                return all_items
+            
+            return results
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 422:
+                logger.debug(f"Search validation error for {author} (might be no results): {e}")
+            else:
+                logger.warning(f"HTTP error searching commits for {author}: {e}")
+            return []
+        except Exception as e:
+            logger.debug(f"Error searching commits for {author}: {e}")
+            return []
+        finally:
+            # Restore original accept header
+            if original_accept:
+                self.headers["Accept"] = original_accept
+                self.client.headers.update(self.headers)
 

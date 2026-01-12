@@ -587,10 +587,10 @@ export default function CredentialsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                Team Members
+                External Members
               </CardTitle>
               <CardDescription>
-                Add GitHub usernames of your internal team members to distinguish internal vs external contributions
+                Add a GitHub usernames of any external contributors to your projects
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
