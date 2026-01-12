@@ -177,6 +177,11 @@ class ApiClient {
       category: string
       count: number
     }>
+    repo_contributions: Array<{
+      name: string
+      value: number
+      type: 'internal' | 'external'
+    }>
   }> {
     const param = rangeDays === null ? 'all' : rangeDays
     const url = contributorLogin 
@@ -192,6 +197,11 @@ class ApiClient {
       internal_external_split: Array<{
         category: string
         count: number
+      }>
+      repo_contributions: Array<{
+        name: string
+        value: number
+        type: 'internal' | 'external'
       }>
     }>(url)
   }

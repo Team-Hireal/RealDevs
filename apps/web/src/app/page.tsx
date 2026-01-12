@@ -246,6 +246,51 @@ export default function DashboardPage() {
     ];
   }, [displayMetrics.internalPercentage, displayMetrics.externalPercentage]);
 
+  // Sort and prepare repository contributions data
+  const sortedRepoContributions = useMemo(() => {
+    if (!dailyCommitsData || !('repo_contributions' in dailyCommitsData) || !Array.isArray(dailyCommitsData.repo_contributions)) {
+      return null;
+    }
+    
+    // Sort by value (commit count) descending - most to least
+    const sorted = [...dailyCommitsData.repo_contributions].sort((a, b) => b.value - a.value);
+    
+    // Get accent color HSL values
+    const baseHsl = getAccentColorHsl();
+    const baseHue = parseInt(baseHsl.split(' ')[0]);
+    const baseSaturation = parseInt(baseHsl.split(' ')[1].replace('%', ''));
+    const baseLightness = baseHsl.split(' ')[2];
+    
+    // Add color information to each entry
+    // Use same hue (accent color) for all, vary only saturation to distinguish
+    return sorted.map((entry, index) => {
+      // Vary saturation smoothly between 50% and 75% to create distinction
+      // More commits = higher saturation (more vibrant)
+      // Fewer commits = lower saturation (less vibrant)
+      const totalRepos = sorted.length;
+      if (totalRepos === 1) {
+        // Single repo uses base saturation
+        return {
+          ...entry,
+          hue: baseHue,
+          saturation: baseHsl.split(' ')[1],
+          lightness: baseLightness,
+        };
+      }
+      
+      // Distribute saturation from 75% (most commits) to 50% (least commits)
+      const saturationRange = 75 - 50;
+      const saturation = 75 - (index / (totalRepos - 1)) * saturationRange;
+      
+      return {
+        ...entry,
+        hue: baseHue, // Same hue for all - accent color
+        saturation: `${Math.round(saturation)}%`,
+        lightness: baseLightness,
+      };
+    });
+  }, [dailyCommitsData, accentColor]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen bg-background">
@@ -624,7 +669,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Contribution Split Bar Chart */}
+            {/* Contribution Split Pie Chart */}
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -638,36 +683,101 @@ export default function DashboardPage() {
                 </CardTitle>
                 <CardDescription>
                   {selectedContributor 
-                    ? `${selectedContributor}'s internal vs external contributions` 
-                    : "Team internal vs external contributions"}
+                    ? `${selectedContributor}'s contributions by repository` 
+                    : "Team contributions broken down by repository"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {dailyCommitsData?.internal_external_split && dailyCommitsData.internal_external_split.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={dailyCommitsData.internal_external_split}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis 
-                        dataKey="category" 
-                        stroke="hsl(var(--muted-foreground))"
-                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                      />
-                      <YAxis 
-                        stroke="hsl(var(--muted-foreground))"
-                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
-                        labelStyle={{ color: 'hsl(var(--foreground))' }}
-                      />
-                      <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
-                      <Bar dataKey="count" fill="hsl(var(--primary))" name="Commits" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                {sortedRepoContributions && sortedRepoContributions.length > 0 ? (
+                  <div className="flex items-start gap-6">
+                    <div className="shrink-0">
+                      <ResponsiveContainer width={200} height={200}>
+                        <PieChart>
+                          <defs>
+                            {sortedRepoContributions.map((entry, index) => {
+                              const opacity = 0.85;
+                              return (
+                                <linearGradient key={`gradient-${index}`} id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={`hsl(${entry.hue} ${entry.saturation} ${entry.lightness} / ${opacity})`} />
+                                  <stop offset="100%" stopColor={`hsl(${entry.hue} ${entry.saturation} ${entry.lightness} / ${opacity * 0.5})`} />
+                                </linearGradient>
+                              );
+                            })}
+                          </defs>
+                          <Pie
+                            data={sortedRepoContributions}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            outerRadius={70}
+                            innerRadius={30}
+                            paddingAngle={2}
+                            dataKey="value"
+                          >
+                            {sortedRepoContributions.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'black', 
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px',
+                              padding: '8px 12px'
+                            }}
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length > 0) {
+                                const data = payload[0].payload;
+                                const repoName = data?.name || '';
+                                // Extract repo name (remove organization prefix if present)
+                                const displayName = repoName.includes('/') ? repoName.split('/')[1] : repoName;
+                                const value = payload[0].value as number;
+                                
+                                return (
+                                  <div style={{ 
+                                    backgroundColor: 'black', 
+                                    color: 'white', 
+                                    fontSize: '12px', 
+                                    fontWeight: 'bold',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid hsl(var(--border))'
+                                  }}>
+                                    {`${displayName}: ${value} commits`}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex-1 space-y-2 max-h-[200px] overflow-y-auto">
+                      {sortedRepoContributions.map((entry, index) => {
+                        const color = `hsl(${entry.hue} ${entry.saturation} ${entry.lightness})`;
+                        // Extract repo name (remove organization prefix if present)
+                        const repoName = entry.name.includes('/') ? entry.name.split('/')[1] : entry.name;
+                        
+                        return (
+                          <div key={index} className="flex items-center justify-between p-2 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div 
+                                className="w-3 h-3 rounded-full shrink-0" 
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className="text-sm truncate">
+                                {repoName}
+                              </span>
+                            </div>
+                            <span className="text-sm font-semibold accent-text ml-2">
+                              {entry.value}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ) : (
                   <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                     <div className="text-center">

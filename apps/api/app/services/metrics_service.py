@@ -553,7 +553,7 @@ class MetricsService:
         
         repos = Repository.query.all()
         if not repos:
-            return {"daily_commits": [], "internal_external_split": []}
+            return {"daily_commits": [], "internal_external_split": [], "repo_contributions": []}
         
         repo_ids = [r.id for r in repos]
         
@@ -631,9 +631,58 @@ class MetricsService:
             {"category": "External", "count": total_external}
         ]
         
+        # Calculate repository-level breakdown
+        repo_breakdown = defaultdict(lambda: {"internal": 0, "external": 0})
+        
+        for stat in stats:
+            contributor = contributors_map.get(stat.contributor_id)
+            if not contributor:
+                continue
+            
+            # If filtering by contributor, skip others
+            if target_github_id is not None and contributor.github_id != target_github_id:
+                continue
+            
+            # Get repo full name
+            repo_full_name = repo_map.get(stat.repo_id, "")
+            if not repo_full_name:
+                continue
+            
+            # Determine if internal
+            is_internal = MetricsService._is_internal_contributor(
+                contributor.login, repo_full_name, team_logins, internal_orgs_config
+            )
+            
+            if is_internal:
+                repo_breakdown[repo_full_name]["internal"] += stat.commits_count
+            else:
+                repo_breakdown[repo_full_name]["external"] += stat.commits_count
+        
+        # Build repository contribution list
+        repo_contributions = []
+        total_external_commits = 0
+        
+        for repo_name, counts in sorted(repo_breakdown.items()):
+            if counts["internal"] > 0:
+                repo_contributions.append({
+                    "name": repo_name,
+                    "value": counts["internal"],
+                    "type": "internal"
+                })
+            total_external_commits += counts["external"]
+        
+        # Add external commitments as a separate category
+        if total_external_commits > 0:
+            repo_contributions.append({
+                "name": "External Commitments",
+                "value": total_external_commits,
+                "type": "external"
+            })
+        
         return {
             "daily_commits": daily_commits,
-            "internal_external_split": internal_external_split
+            "internal_external_split": internal_external_split,
+            "repo_contributions": repo_contributions
         }
     
     @staticmethod
