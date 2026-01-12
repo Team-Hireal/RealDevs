@@ -4,13 +4,9 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type AccentColor = "gold" | "metallic-pink" | "bronze" | "copper" | "platinum" | "steel" | "rose-gold" | "titanium";
 
-export type BackgroundPattern = "flowing" | "organic";
-
 interface ThemeContextType {
   accentColor: AccentColor;
   setAccentColor: (color: AccentColor) => void;
-  backgroundPattern: BackgroundPattern;
-  setBackgroundPattern: (pattern: BackgroundPattern) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -26,14 +22,8 @@ const ACCENT_COLORS: Record<AccentColor, { name: string; hsl: string }> = {
   titanium: { name: "Titanium", hsl: "195 18% 65%" },
 };
 
-const BACKGROUND_PATTERNS: Record<BackgroundPattern, { name: string; class: string }> = {
-  "flowing": { name: "Flowing", class: "bg-pattern-flowing" },
-  "organic": { name: "Organic", class: "bg-pattern-organic" },
-};
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [accentColor, setAccentColorState] = useState<AccentColor>("gold");
-  const [backgroundPattern, setBackgroundPatternState] = useState<BackgroundPattern>("flowing");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -41,17 +31,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const initialColor = (savedColor && ACCENT_COLORS[savedColor]) ? savedColor : "gold";
     setAccentColorState(initialColor);
     
-    const savedPattern = localStorage.getItem("background-pattern") as BackgroundPattern;
-    const initialPattern = (savedPattern && BACKGROUND_PATTERNS[savedPattern]) ? savedPattern : "flowing";
-    setBackgroundPatternState(initialPattern);
-    
     // Set initial CSS variable immediately
     const color = ACCENT_COLORS[initialColor];
     document.documentElement.style.setProperty("--accent", color.hsl);
     
-    // Set initial background pattern
+    // Remove all pattern classes while preserving other classes
     const bodyClasses = document.body.className.split(" ").filter(c => !c.startsWith("bg-pattern-"));
-    document.body.className = [...bodyClasses, BACKGROUND_PATTERNS[initialPattern].class].join(" ");
+    document.body.className = bodyClasses.join(" ");
     
     setMounted(true);
   }, []);
@@ -64,26 +50,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [accentColor, mounted]);
 
-  useEffect(() => {
-    if (mounted) {
-      // Remove all pattern classes while preserving other classes
-      const bodyClasses = document.body.className.split(" ").filter(c => !c.startsWith("bg-pattern-"));
-      document.body.className = [...bodyClasses, BACKGROUND_PATTERNS[backgroundPattern].class].join(" ");
-      localStorage.setItem("background-pattern", backgroundPattern);
-    }
-  }, [backgroundPattern, mounted]);
-
   const setAccentColor = (color: AccentColor) => {
     setAccentColorState(color);
   };
 
-  const setBackgroundPattern = (pattern: BackgroundPattern) => {
-    setBackgroundPatternState(pattern);
-  };
-
   // Always provide the context, even before mounting
   return (
-    <ThemeContext.Provider value={{ accentColor, setAccentColor, backgroundPattern, setBackgroundPattern }}>
+    <ThemeContext.Provider value={{ accentColor, setAccentColor }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -97,5 +70,5 @@ export function useTheme() {
   return context;
 }
 
-export { ACCENT_COLORS, BACKGROUND_PATTERNS };
+export { ACCENT_COLORS };
 

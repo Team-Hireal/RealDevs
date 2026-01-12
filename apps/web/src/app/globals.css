@@ -47,15 +47,10 @@
 }
 
 @layer utilities {
-  .glass {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-  
   .glass-card {
-    @apply glass rounded-lg shadow-xl;
+    @apply rounded-lg shadow-xl;
+    background-color: hsl(0 0% 8%);
+    border: 1px solid hsl(var(--border));
   }
   
   .accent-text {
@@ -91,27 +86,4 @@
   background: hsl(var(--muted-foreground));
 }
 
-/* Background Patterns - Seamless, non-repeating */
-.bg-pattern-flowing {
-  background-image: 
-    radial-gradient(ellipse 80% 60% at 20% 30%, hsl(var(--accent) / 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 80% at 80% 70%, hsl(var(--accent) / 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse 70% 50% at 50% 50%, hsl(var(--accent) / 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 70% at 10% 80%, hsl(var(--accent) / 0.1) 0%, transparent 50%);
-  background-size: 100% 100%;
-  background-position: 0 0;
-  background-attachment: fixed;
-}
-
-.bg-pattern-organic {
-  background-image: 
-    radial-gradient(circle at 15% 25%, hsl(var(--accent) / 0.18) 0%, transparent 35%),
-    radial-gradient(circle at 85% 75%, hsl(var(--accent) / 0.15) 0%, transparent 40%),
-    radial-gradient(circle at 50% 10%, hsl(var(--accent) / 0.12) 0%, transparent 30%),
-    radial-gradient(circle at 30% 90%, hsl(var(--accent) / 0.14) 0%, transparent 35%),
-    radial-gradient(circle at 70% 50%, hsl(var(--accent) / 0.1) 0%, transparent 45%);
-  background-size: 100% 100%;
-  background-position: 0 0;
-  background-attachment: fixed;
-}
 

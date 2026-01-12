@@ -263,7 +263,7 @@ export default function CredentialsPage() {
                                 return (
                                   <label
                                     key={repo.id}
-                                    className="flex items-center gap-3 p-2 rounded hover:bg-secondary/50 cursor-pointer"
+                                    className="flex items-center gap-3 p-2 rounded hover:bg-[hsl(0_0%_10%)] cursor-pointer"
                                   >
                                     <input
                                       type="checkbox"
@@ -319,7 +319,7 @@ export default function CredentialsPage() {
                           {selectedRepos.repos.map((repo) => (
                             <div
                               key={repo.id}
-                              className="flex items-center justify-between p-3 rounded-lg bg-secondary/50"
+                              className="flex items-center justify-between p-3 rounded-lg bg-[hsl(0_0%_8%)]"
                             >
                               <div className="flex items-center gap-2">
                                 <Github className="w-4 h-4" />
@@ -452,7 +452,7 @@ export default function CredentialsPage() {
                           
                           return (
                             <div key={org} className="space-y-2">
-                              <div className="flex items-center gap-3 p-2 rounded hover:bg-secondary/50">
+                              <div className="flex items-center gap-3 p-2 rounded hover:bg-[hsl(0_0%_10%)]">
                                 <input
                                   type="checkbox"
                                   checked={isOrgInternal}
@@ -492,7 +492,7 @@ export default function CredentialsPage() {
                                     return (
                                       <label
                                         key={repo.id}
-                                        className="flex items-center gap-3 p-2 rounded hover:bg-secondary/30 cursor-pointer"
+                                        className="flex items-center gap-3 p-2 rounded hover:bg-[hsl(0_0%_8%)] cursor-pointer"
                                       >
                                         <input
                                           type="checkbox"
@@ -554,7 +554,7 @@ export default function CredentialsPage() {
                     )}
 
                     {internalOrgs.length > 0 && (
-                      <div className="p-4 rounded-lg bg-secondary/30 border border-secondary">
+                      <div className="p-4 rounded-lg bg-[hsl(0_0%_8%)] border border-secondary">
                         <h4 className="text-sm font-semibold mb-2">Current Configuration</h4>
                         <div className="space-y-2 text-sm">
                           <div>
@@ -619,7 +619,7 @@ export default function CredentialsPage() {
                   {members.map((login) => (
                     <div
                       key={login}
-                      className="flex items-center justify-between p-3 rounded-lg bg-secondary/50"
+                      className="flex items-center justify-between p-3 rounded-lg bg-[hsl(0_0%_8%)]"
                     >
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm font-bold">

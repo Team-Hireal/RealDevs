@@ -165,10 +165,10 @@ export default function DashboardPage() {
         <main className="flex-1 p-8 overflow-auto">
           <div className="max-w-7xl mx-auto">
             <div className="space-y-6">
-              <div className="h-12 bg-secondary/30 rounded-lg animate-pulse" />
+              <div className="h-12 bg-[hsl(0_0%_8%)] rounded-lg animate-pulse" />
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-40 bg-secondary/30 rounded-lg animate-pulse" />
+                  <div key={i} className="h-40 bg-[hsl(0_0%_8%)] rounded-lg animate-pulse" />
                 ))}
               </div>
             </div>
@@ -195,7 +195,7 @@ export default function DashboardPage() {
 
             <div className="flex items-center gap-4">
               {/* Date Range Selector */}
-              <div className="flex items-center gap-2 bg-secondary/30 rounded-lg p-1">
+              <div className="flex items-center gap-2 bg-[hsl(0_0%_8%)] rounded-lg p-1">
                 <Button
                   variant={rangeDays === 7 ? "default" : "ghost"}
                   size="sm"
@@ -622,7 +622,7 @@ export default function DashboardPage() {
                 /* Individual Contributor View */
                 <div className="space-y-6">
                   {/* Contributor Profile Header */}
-                  <div className="flex items-center gap-4 p-4 rounded-lg border border-border bg-secondary/30">
+                  <div className="flex items-center gap-4 p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                     {selectedContributorData.avatar_url ? (
                       <img 
                         src={selectedContributorData.avatar_url} 
@@ -653,7 +653,7 @@ export default function DashboardPage() {
 
                   {/* Contributor Metrics Grid */}
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
                         <GitCommit className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Commits</span>
@@ -663,7 +663,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     
-                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
                         <GitPullRequest className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">PRs Opened</span>
@@ -673,7 +673,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     
-                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
                         <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">PRs Merged</span>
@@ -683,7 +683,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     
-                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
                         <AlertTriangle className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Issues Closed</span>
@@ -695,7 +695,7 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Contributor Performance Summary */}
-                  <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                  <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                     <h4 className="font-semibold mb-3">Performance Summary</h4>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
@@ -732,7 +732,7 @@ export default function DashboardPage() {
                       .map((contributor, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-4 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer"
+                          className="flex items-center gap-4 p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)] hover:bg-[hsl(0_0%_10%)] transition-colors cursor-pointer"
                           onClick={() => setSelectedContributor(contributor.login)}
                         >
                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold">
@@ -804,7 +804,7 @@ export default function DashboardPage() {
                     {displayRiskFlags.map((flag, index) => (
                       <div
                         key={index}
-                        className="p-3 rounded-lg border border-border bg-secondary/30"
+                        className="p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)]"
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
@@ -876,7 +876,7 @@ export default function DashboardPage() {
               <CardContent>
                 {weeklyReport?.text ? (
                   <div className="prose prose-invert max-w-none">
-                    <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans bg-secondary/30 p-4 rounded-lg">
+                    <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans bg-[hsl(0_0%_8%)] p-4 rounded-lg">
                       {weeklyReport.text}
                     </pre>
                   </div>

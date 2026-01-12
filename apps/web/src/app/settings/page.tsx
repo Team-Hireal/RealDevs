@@ -159,7 +159,7 @@ export default function SettingsPage() {
     const value = values[setting.key] ?? setting.defaultValue;
 
     return (
-      <div key={setting.key} className="p-4 rounded-lg bg-secondary/30 border border-border">
+      <div key={setting.key} className="p-4 rounded-lg bg-[hsl(0_0%_8%)] border border-border">
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1">
             <h4 className="font-semibold mb-1">{setting.label}</h4>
@@ -253,8 +253,8 @@ export default function SettingsPage() {
 
           {isLoading ? (
             <div className="space-y-6">
-              <div className="h-40 bg-secondary/30 rounded-lg animate-pulse" />
-              <div className="h-40 bg-secondary/30 rounded-lg animate-pulse" />
+              <div className="h-40 bg-[hsl(0_0%_8%)] rounded-lg animate-pulse" />
+              <div className="h-40 bg-[hsl(0_0%_8%)] rounded-lg animate-pulse" />
             </div>
           ) : (
             <>
