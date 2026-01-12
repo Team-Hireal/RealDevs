@@ -75,6 +75,39 @@ class MetricsService:
         return False
     
     @staticmethod
+    def _calculate_trendline_slope(daily_scores: List[float]) -> float:
+        """
+        Calculate the slope of a trendline using least squares regression.
+        
+        Args:
+            daily_scores: List of weighted scores for each day (ordered chronologically)
+        
+        Returns:
+            The slope of the trendline. Positive values indicate upward trend,
+            negative values indicate downward trend.
+        """
+        if not daily_scores or len(daily_scores) < 2:
+            return 0.0
+        
+        n = len(daily_scores)
+        # x values are day indices (0, 1, 2, ...)
+        x_values = list(range(n))
+        
+        # Calculate sums for least squares formula
+        sum_x = sum(x_values)
+        sum_y = sum(daily_scores)
+        sum_xy = sum(x * y for x, y in zip(x_values, daily_scores))
+        sum_x_squared = sum(x * x for x in x_values)
+        
+        # Least squares slope formula: slope = (n*Σ(xy) - Σ(x)*Σ(y)) / (n*Σ(x²) - (Σ(x))²)
+        denominator = n * sum_x_squared - sum_x * sum_x
+        if denominator == 0:
+            return 0.0
+        
+        slope = (n * sum_xy - sum_x * sum_y) / denominator
+        return slope
+    
+    @staticmethod
     def get_dashboard_data(range_days: Optional[int] = 7) -> Dict:
         """Get all dashboard data including metrics and risk flags."""
         until = datetime.now(timezone.utc)
@@ -197,14 +230,41 @@ class MetricsService:
         internal_commits = sum(u["commits"] for u in user_stats.values() if u["is_internal"])
         external_commits = sum(u["commits"] for u in user_stats.values() if not u["is_internal"])
         
-        # Calculate momentum score
+        # Calculate average trend using least squares regression
         weights = MetricsService.get_weights()
-        momentum_score = (
-            total_commits * weights["commits"] +
-            total_prs_opened * weights["prs_opened"] +
-            total_prs_merged * weights["prs_merged"] +
-            total_issues_closed * weights["issues_closed"]
-        )
+        
+        # Group stats by date to calculate daily weighted scores
+        # Include ALL stats, not just those with valid contributors, for accurate trend calculation
+        daily_weighted_scores = defaultdict(float)
+        for stat in stats:
+            # Calculate weighted score for this day (aggregate across all contributors/repos)
+            daily_score = (
+                stat.commits_count * weights["commits"] +
+                stat.prs_opened * weights["prs_opened"] +
+                stat.prs_merged * weights["prs_merged"] +
+                stat.issues_closed * weights["issues_closed"]
+            )
+            
+            # Normalize date to date object (handle both datetime and date objects)
+            if isinstance(stat.date, datetime):
+                date_key = stat.date.date()
+            else:
+                date_key = stat.date
+            
+            daily_weighted_scores[date_key] += daily_score
+        
+        # Sort by date and extract scores
+        sorted_dates = sorted(daily_weighted_scores.keys())
+        daily_scores = [daily_weighted_scores[date] for date in sorted_dates]
+        
+        # Log for debugging
+        if len(daily_scores) > 0:
+            logger.debug(f"Team summary trend calculation: {len(daily_scores)} days, scores: {daily_scores[:5]}... (showing first 5)")
+        else:
+            logger.debug("Team summary trend calculation: No daily scores found")
+        
+        # Calculate trendline slope
+        average_trend = MetricsService._calculate_trendline_slope(daily_scores)
         
         # Calculate percentages
         # https://github.com/SimonSaysGiveMeSmile
@@ -216,7 +276,7 @@ class MetricsService:
             "total_prs_opened": total_prs_opened,
             "total_prs_merged": total_prs_merged,
             "total_issues_closed": total_issues_closed,
-            "momentum_score": round(momentum_score, 2),
+            "average_trend": round(average_trend, 2),
             "internal_commits": internal_commits,
             "external_commits": external_commits,
             "internal_percentage": round(internal_pct, 1),
@@ -237,13 +297,30 @@ class MetricsService:
         total_prs_merged = sum(s.prs_merged for s in stats)
         total_issues_closed = sum(s.issues_closed for s in stats)
         
+        # Calculate average trend using least squares regression
         weights = MetricsService.get_weights()
-        momentum_score = (
-            total_commits * weights["commits"] +
-            total_prs_opened * weights["prs_opened"] +
-            total_prs_merged * weights["prs_merged"] +
-            total_issues_closed * weights["issues_closed"]
-        )
+        
+        # Group stats by date to calculate daily weighted scores
+        daily_weighted_scores = defaultdict(float)
+        for stat in stats:
+            # Calculate weighted score for this day
+            daily_score = (
+                stat.commits_count * weights["commits"] +
+                stat.prs_opened * weights["prs_opened"] +
+                stat.prs_merged * weights["prs_merged"] +
+                stat.issues_closed * weights["issues_closed"]
+            )
+            
+            # Use date as key (normalize to date only, ignoring time)
+            date_key = stat.date.date() if hasattr(stat.date, 'date') else stat.date
+            daily_weighted_scores[date_key] += daily_score
+        
+        # Sort by date and extract scores
+        sorted_dates = sorted(daily_weighted_scores.keys())
+        daily_scores = [daily_weighted_scores[date] for date in sorted_dates]
+        
+        # Calculate trendline slope
+        average_trend = MetricsService._calculate_trendline_slope(daily_scores)
         
         return {
             "repo_id": repo.id,
@@ -252,7 +329,7 @@ class MetricsService:
             "prs_opened": total_prs_opened,
             "prs_merged": total_prs_merged,
             "issues_closed": total_issues_closed,
-            "momentum_score": round(momentum_score, 2),
+            "average_trend": round(average_trend, 2),
             "last_synced": repo.last_synced_at.isoformat() if repo.last_synced_at else None
         }
     
@@ -273,7 +350,8 @@ class MetricsService:
             "login": None,
             "name": None,
             "avatar_url": None,
-            "is_internal": False
+            "is_internal": False,
+            "daily_scores": defaultdict(float)  # Track daily weighted scores for trend calculation
         })
         
         stats = DailyStats.query.filter(
@@ -286,6 +364,8 @@ class MetricsService:
         contributor_ids = list(set(stat.contributor_id for stat in stats))
         contributors_list = Contributor.query.filter(Contributor.id.in_(contributor_ids)).all()
         contributors_map = {c.id: c for c in contributors_list}
+        
+        weights = MetricsService.get_weights()
         
         for stat in stats:
             contributor = contributors_map.get(stat.contributor_id)
@@ -310,18 +390,27 @@ class MetricsService:
             # Mark as internal if ANY of their work is internal
             if is_internal:
                 user_stats[github_id]["is_internal"] = True
+            
+            # Calculate weighted score for this day
+            daily_score = (
+                stat.commits_count * weights["commits"] +
+                stat.prs_opened * weights["prs_opened"] +
+                stat.prs_merged * weights["prs_merged"] +
+                stat.issues_closed * weights["issues_closed"]
+            )
+            
+            # Use date as key (normalize to date only, ignoring time)
+            date_key = stat.date.date() if hasattr(stat.date, 'date') else stat.date
+            user_stats[github_id]["daily_scores"][date_key] += daily_score
         
         # Build result
-        weights = MetricsService.get_weights()
         results = []
         
         for github_id, metrics in user_stats.items():
-            momentum_score = (
-                metrics["commits"] * weights["commits"] +
-                metrics["prs_opened"] * weights["prs_opened"] +
-                metrics["prs_merged"] * weights["prs_merged"] +
-                metrics["issues_closed"] * weights["issues_closed"]
-            )
+            # Calculate average trend using least squares regression
+            sorted_dates = sorted(metrics["daily_scores"].keys())
+            daily_scores = [metrics["daily_scores"][date] for date in sorted_dates]
+            average_trend = MetricsService._calculate_trendline_slope(daily_scores)
             
             results.append({
                 "login": metrics["login"],
@@ -332,11 +421,11 @@ class MetricsService:
                 "prs_opened": metrics["prs_opened"],
                 "prs_merged": metrics["prs_merged"],
                 "issues_closed": metrics["issues_closed"],
-                "momentum_score": round(momentum_score, 2)
+                "average_trend": round(average_trend, 2)
             })
         
-        # Sort by momentum score
-        results.sort(key=lambda x: x["momentum_score"], reverse=True)
+        # Sort by average trend (descending)
+        results.sort(key=lambda x: x["average_trend"], reverse=True)
         
         return results
     
@@ -575,7 +664,9 @@ class MetricsService:
         lines.append(f"  • {summary.get('total_prs_merged', 0)} PRs merged")
         lines.append(f"  • {summary.get('total_prs_opened', 0)} PRs opened")
         lines.append(f"  • {summary.get('total_issues_closed', 0)} issues closed")
-        lines.append(f"  • Momentum Score: {summary.get('momentum_score', 0)}")
+        avg_trend = summary.get('average_trend', 0)
+        trend_label = "↑ Positive" if avg_trend > 0 else "↓ Negative" if avg_trend < 0 else "→ Neutral"
+        lines.append(f"  • Average Trend: {avg_trend:.2f} ({trend_label})")
         lines.append("")
         
         # Internal vs External
@@ -586,10 +677,11 @@ class MetricsService:
         
         # Top repos
         if repos:
-            top_repos = sorted(repos, key=lambda r: r['momentum_score'], reverse=True)[:3]
+            top_repos = sorted(repos, key=lambda r: r.get('average_trend', 0), reverse=True)[:3]
             lines.append("🔹 Most Active Repos:")
             for repo in top_repos:
-                lines.append(f"  • {repo['full_name']} (score: {repo['momentum_score']})")
+                trend = repo.get('average_trend', 0)
+                lines.append(f"  • {repo['full_name']} (trend: {trend:.2f})")
             lines.append("")
         
         # Top contributors
@@ -598,7 +690,8 @@ class MetricsService:
             if top_contributors:
                 lines.append("🔹 Top Contributors:")
                 for contrib in top_contributors:
-                    lines.append(f"  • {contrib['login']} (score: {contrib['momentum_score']})")
+                    trend = contrib.get('average_trend', 0)
+                    lines.append(f"  • {contrib['login']} (trend: {trend:.2f})")
                 lines.append("")
         
         # Risk flags

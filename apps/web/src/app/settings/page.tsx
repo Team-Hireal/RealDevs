@@ -54,7 +54,7 @@ const WEIGHT_SETTINGS: SettingItem[] = [
   {
     key: "weight_commits",
     label: "Commits Weight",
-    description: "Weight for commits in momentum score",
+    description: "Weight for commits in average trend calculation",
     defaultValue: 1.0,
     min: 0,
     max: 5,
@@ -62,7 +62,7 @@ const WEIGHT_SETTINGS: SettingItem[] = [
   {
     key: "weight_prs_opened",
     label: "PRs Opened Weight",
-    description: "Weight for opened PRs in momentum score",
+    description: "Weight for opened PRs in average trend calculation",
     defaultValue: 1.5,
     min: 0,
     max: 5,
@@ -70,7 +70,7 @@ const WEIGHT_SETTINGS: SettingItem[] = [
   {
     key: "weight_prs_merged",
     label: "PRs Merged Weight",
-    description: "Weight for merged PRs in momentum score",
+    description: "Weight for merged PRs in average trend calculation",
     defaultValue: 2.0,
     min: 0,
     max: 5,
@@ -78,7 +78,7 @@ const WEIGHT_SETTINGS: SettingItem[] = [
   {
     key: "weight_issues_closed",
     label: "Issues Closed Weight",
-    description: "Weight for closed issues in momentum score",
+    description: "Weight for closed issues in average trend calculation",
     defaultValue: 1.0,
     min: 0,
     max: 5,
@@ -227,7 +227,7 @@ export default function SettingsPage() {
             <div>
               <h1 className="text-4xl font-bold accent-text mb-2">Settings</h1>
               <p className="text-muted-foreground">
-                Configure risk thresholds and momentum scoring weights
+                Configure risk thresholds and average trend calculation weights
               </p>
             </div>
 
@@ -277,29 +277,31 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              {/* Momentum Score Weights */}
+              {/* Average Trend Weights */}
               <Card className="glass-card">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5" />
-                    Momentum Score Weights
+                    Average Trend Weights
                   </CardTitle>
                   <CardDescription>
-                    Adjust the importance of different metrics in the momentum score calculation
+                    Adjust the importance of different metrics in the average trend calculation
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {WEIGHT_SETTINGS.map(renderSettingControl)}
                   
                   <div className="mt-6 p-4 rounded-lg accent-bg accent-border border">
-                    <h4 className="font-semibold accent-text mb-2">How Momentum Score Works</h4>
+                    <h4 className="font-semibold accent-text mb-2">How Average Trend Works</h4>
                     <p className="text-sm text-muted-foreground">
-                      Momentum Score = (Commits × {values.weight_commits || 1.0}) + 
+                      Daily Weighted Score = (Commits × {values.weight_commits || 1.0}) + 
                       (PRs Opened × {values.weight_prs_opened || 1.5}) + 
                       (PRs Merged × {values.weight_prs_merged || 2.0}) + 
                       (Issues Closed × {values.weight_issues_closed || 1.0})
                     </p>
                     <p className="text-sm text-muted-foreground mt-2">
+                      The average trend is calculated using least squares regression on daily weighted scores over time.
+                      A positive trend indicates increasing activity, negative indicates decreasing activity.
                       Higher weights give more importance to that metric. Merged PRs typically have the highest weight
                       as they represent completed, reviewed work.
                     </p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   LayoutDashboard, 
   TrendingUp, 
+  TrendingDown,
+  Minus,
   Users, 
   AlertTriangle, 
   GitCommit, 
@@ -42,6 +44,9 @@ export default function DashboardPage() {
   const [rangeDays, setRangeDays] = useState<number | null>(7);
   const [copied, setCopied] = useState(false);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
+  const [selectedHighFlag, setSelectedHighFlag] = useState<string | null>(null);
+  const [selectedMediumFlag, setSelectedMediumFlag] = useState<string | null>(null);
+  const [selectedLowFlag, setSelectedLowFlag] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { accentColor } = useTheme();
 
@@ -92,12 +97,46 @@ export default function DashboardPage() {
     }
   };
 
-  const formatMomentumScore = (score: number) => {
-    return score.toFixed(1);
+  const formatAverageTrend = (trend: number | undefined | null) => {
+    if (trend === undefined || trend === null || isNaN(trend)) {
+      return '0.00';
+    }
+    const sign = trend > 0 ? '+' : '';
+    return `${sign}${trend.toFixed(2)}`;
+  };
+
+  const getTrendLabel = (trend: number | undefined | null) => {
+    if (trend === undefined || trend === null || isNaN(trend)) {
+      return '→ Neutral';
+    }
+    if (trend > 0) return '↑ Positive';
+    if (trend < 0) return '↓ Negative';
+    return '→ Neutral';
+  };
+
+  const getTrendIcon = (trend: number | undefined | null, className?: string) => {
+    const iconClass = className || "w-4 h-4";
+    if (trend === undefined || trend === null || isNaN(trend) || trend === 0) {
+      return <Minus className={iconClass} />;
+    }
+    if (trend > 0) {
+      return <TrendingUp className={iconClass} />;
+    }
+    return <TrendingDown className={iconClass} />;
+  };
+
+  const getTrendIconColor = (trend: number | undefined | null) => {
+    if (trend === undefined || trend === null || isNaN(trend) || trend === 0) {
+      return "text-muted-foreground";
+    }
+    if (trend > 0) {
+      return "text-green-500";
+    }
+    return "text-red-500";
   };
 
   const topContributor = dashboardData?.contributors
-    ?.sort((a, b) => b.momentum_score - a.momentum_score)[0];
+    ?.sort((a, b) => b.average_trend - a.average_trend)[0];
 
   const selectedContributorData = useMemo(() => {
     if (!selectedContributor || !dashboardData?.contributors) return null;
@@ -106,7 +145,7 @@ export default function DashboardPage() {
 
   const sortedContributors = useMemo(() => {
     if (!dashboardData?.contributors) return [];
-    return [...dashboardData.contributors].sort((a, b) => b.momentum_score - a.momentum_score);
+    return [...dashboardData.contributors].sort((a, b) => b.average_trend - a.average_trend);
   }, [dashboardData?.contributors]);
 
   // Computed metrics that switch between team and individual contributor data
@@ -119,7 +158,7 @@ export default function DashboardPage() {
       
       return {
         totalCommits: selectedContributorData.commits,
-        momentumScore: selectedContributorData.momentum_score,
+        averageTrend: selectedContributorData.average_trend ?? 0,
         internalPercentage,
         externalPercentage,
         isIndividual: true,
@@ -129,7 +168,7 @@ export default function DashboardPage() {
     // Team-wide data
     return {
       totalCommits: dashboardData?.team_summary.total_commits || 0,
-      momentumScore: dashboardData?.team_summary.momentum_score || 0,
+      averageTrend: dashboardData?.team_summary.average_trend || 0,
       internalPercentage: dashboardData?.team_summary.internal_percentage || 0,
       externalPercentage: dashboardData?.team_summary.external_percentage || 0,
       isIndividual: false,
@@ -146,6 +185,43 @@ export default function DashboardPage() {
       flag => flag.contributor === selectedContributor
     );
   }, [dashboardData?.risk_flags, selectedContributor]);
+
+  // Group risk flags by severity
+  const riskFlagsBySeverity = useMemo(() => {
+    const grouped = {
+      high: [] as typeof displayRiskFlags,
+      medium: [] as typeof displayRiskFlags,
+      low: [] as typeof displayRiskFlags,
+    };
+    
+    displayRiskFlags.forEach(flag => {
+      grouped[flag.severity].push(flag);
+    });
+    
+    return grouped;
+  }, [displayRiskFlags]);
+
+  // Get selected flag for preview
+  const getSelectedFlag = (severity: 'high' | 'medium' | 'low') => {
+    const flags = riskFlagsBySeverity[severity];
+    if (flags.length === 0) return null;
+    
+    const selectedIndex = severity === 'high' 
+      ? selectedHighFlag 
+      : severity === 'medium' 
+      ? selectedMediumFlag 
+      : selectedLowFlag;
+    
+    if (selectedIndex === null) return flags[0]; // Default to first flag
+    return flags.find((_, idx) => idx.toString() === selectedIndex) || flags[0];
+  };
+
+  // Reset selected flags when risk flags or contributor changes
+  useEffect(() => {
+    setSelectedHighFlag(riskFlagsBySeverity.high.length > 0 ? "0" : null);
+    setSelectedMediumFlag(riskFlagsBySeverity.medium.length > 0 ? "0" : null);
+    setSelectedLowFlag(riskFlagsBySeverity.low.length > 0 ? "0" : null);
+  }, [riskFlagsBySeverity, selectedContributor]);
 
   // Get accent color HSL value for gradients
   const getAccentColorHsl = () => {
@@ -313,15 +389,17 @@ export default function DashboardPage() {
                 ) : (
                   <div className="flex-1 min-h-[120px] flex items-center justify-center">
                     <div className="text-center">
-                      <TrendingUp className="w-6 h-6 mx-auto mb-1 opacity-50 text-muted-foreground" />
+                      <Minus className="w-6 h-6 mx-auto mb-1 opacity-50 text-muted-foreground" />
                       <p className="text-xs text-muted-foreground">No trend data</p>
                     </div>
                   </div>
                 )}
                 <div className="mt-3 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-green-500" />
+                  <span className={getTrendIconColor(displayMetrics.averageTrend)}>
+                    {getTrendIcon(displayMetrics.averageTrend)}
+                  </span>
                   <span className="text-xs text-muted-foreground">
-                    Momentum: {formatMomentumScore(displayMetrics.momentumScore)}
+                    Average Trend: {formatAverageTrend(displayMetrics.averageTrend)}
                   </span>
                 </div>
               </CardContent>
@@ -430,10 +508,15 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="text-lg font-bold accent-text">
-                      {formatMomentumScore((selectedContributorData || topContributor)!.momentum_score)}
+                    <div className="flex items-center gap-2">
+                      <span className={getTrendIconColor((selectedContributorData || topContributor)?.average_trend)}>
+                        {getTrendIcon((selectedContributorData || topContributor)?.average_trend, "w-5 h-5")}
+                      </span>
+                      <div className="text-lg font-bold accent-text">
+                        {formatAverageTrend((selectedContributorData || topContributor)?.average_trend)}
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">Momentum Score</p>
+                    <p className="text-xs text-muted-foreground">Average Trend</p>
                   </div>
                 ) : (
                   <div className="text-muted-foreground text-sm">No contributors yet</div>
@@ -607,7 +690,7 @@ export default function DashboardPage() {
                     Contributors
                   </CardTitle>
                   <CardDescription>
-                    {selectedContributor ? "Individual contributor details" : "Top contributors sorted by momentum score"}
+                    {selectedContributor ? "Individual contributor details" : "Top contributors sorted by average trend"}
                   </CardDescription>
                 </div>
                 <div className="w-64">
@@ -657,8 +740,10 @@ export default function DashboardPage() {
                           {selectedContributorData.is_internal ? "Internal" : "External"}
                         </Badge>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <TrendingUp className="w-4 h-4" />
-                          <span>Momentum: {formatMomentumScore(selectedContributorData.momentum_score)}</span>
+                          <span className={getTrendIconColor(selectedContributorData?.average_trend)}>
+                            {getTrendIcon(selectedContributorData?.average_trend)}
+                          </span>
+                          <span>Average Trend: {formatAverageTrend(selectedContributorData?.average_trend)}</span>
                         </div>
                       </div>
                     </div>
@@ -743,9 +828,9 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Momentum Score:</span>
+                        <span className="text-muted-foreground">Average Trend:</span>
                         <span className="font-semibold accent-text">
-                          {formatMomentumScore(selectedContributorData.momentum_score)}
+                          {formatAverageTrend(selectedContributorData?.average_trend)}
                         </span>
                       </div>
                     </div>
@@ -795,10 +880,15 @@ export default function DashboardPage() {
                             {contributor.is_internal ? "Internal" : "External"}
                           </Badge>
                           <div className="text-right">
-                            <div className="font-bold accent-text text-lg">
-                              {formatMomentumScore(contributor.momentum_score)}
+                            <div className="flex items-center justify-end gap-1">
+                              <span className={getTrendIconColor(contributor?.average_trend)}>
+                                {getTrendIcon(contributor?.average_trend, "w-4 h-4")}
+                              </span>
+                              <span className="font-bold accent-text text-lg">
+                                {formatAverageTrend(contributor?.average_trend)}
+                              </span>
                             </div>
-                            <div className="text-xs text-muted-foreground">momentum</div>
+                            <div className="text-xs text-muted-foreground">trend</div>
                           </div>
                           <Button
                             variant="ghost"
@@ -850,36 +940,135 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {displayRiskFlags.length > 0 ? (
-                  <div className="space-y-3">
-                    {displayRiskFlags.map((flag, index) => (
-                      <div
-                        key={index}
-                        className="p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)]"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Badge variant={getSeverityColor(flag.severity)}>
-                              {flag.severity}
-                            </Badge>
-                            <span className="font-semibold text-sm">{flag.title}</span>
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-1">
-                          {flag.description}
-                        </p>
-                        {flag.repo && (
-                  <div className="text-xs text-muted-foreground">
-                    Repo: <span className="font-mono">{flag.repo}</span>
-                  </div>
-                )}
-                        {/* https://github.com/SimonSaysGiveMeSmile */}
-                        {flag.contributor && !selectedContributor && (
-                          <div className="text-xs text-muted-foreground">
-                            Contributor: <span className="font-mono">{flag.contributor}</span>
+                  <div className="space-y-4">
+                    {/* High Severity Dropdown */}
+                    {riskFlagsBySeverity.high.length > 0 && (
+                      <div className="space-y-2">
+                        <Select
+                          value={selectedHighFlag || "0"}
+                          onValueChange={setSelectedHighFlag}
+                        >
+                          <SelectTrigger>
+                            <SelectValue>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="destructive">High</Badge>
+                                <span>{riskFlagsBySeverity.high.length} flag{riskFlagsBySeverity.high.length !== 1 ? 's' : ''}</span>
+                              </div>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {riskFlagsBySeverity.high.map((flag, index) => (
+                              <SelectItem key={index} value={index.toString()}>
+                                {flag.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {getSelectedFlag('high') && (
+                          <div className="p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {getSelectedFlag('high')!.description}
+                            </p>
+                            {getSelectedFlag('high')!.repo && (
+                              <div className="text-xs text-muted-foreground">
+                                Repo: <span className="font-mono">{getSelectedFlag('high')!.repo}</span>
+                              </div>
+                            )}
+                            {getSelectedFlag('high')!.contributor && !selectedContributor && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Contributor: <span className="font-mono">{getSelectedFlag('high')!.contributor}</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    ))}
+                    )}
+
+                    {/* Medium Severity Dropdown */}
+                    {riskFlagsBySeverity.medium.length > 0 && (
+                      <div className="space-y-2">
+                        <Select
+                          value={selectedMediumFlag || "0"}
+                          onValueChange={setSelectedMediumFlag}
+                        >
+                          <SelectTrigger>
+                            <SelectValue>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="default">Medium</Badge>
+                                <span>{riskFlagsBySeverity.medium.length} flag{riskFlagsBySeverity.medium.length !== 1 ? 's' : ''}</span>
+                              </div>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {riskFlagsBySeverity.medium.map((flag, index) => (
+                              <SelectItem key={index} value={index.toString()}>
+                                {flag.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {getSelectedFlag('medium') && (
+                          <div className="p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {getSelectedFlag('medium')!.description}
+                            </p>
+                            {getSelectedFlag('medium')!.repo && (
+                              <div className="text-xs text-muted-foreground">
+                                Repo: <span className="font-mono">{getSelectedFlag('medium')!.repo}</span>
+                              </div>
+                            )}
+                            {getSelectedFlag('medium')!.contributor && !selectedContributor && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Contributor: <span className="font-mono">{getSelectedFlag('medium')!.contributor}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Low Severity Dropdown */}
+                    {riskFlagsBySeverity.low.length > 0 && (
+                      <div className="space-y-2">
+                        <Select
+                          value={selectedLowFlag || "0"}
+                          onValueChange={setSelectedLowFlag}
+                        >
+                          <SelectTrigger>
+                            <SelectValue>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">Low</Badge>
+                                <span>{riskFlagsBySeverity.low.length} flag{riskFlagsBySeverity.low.length !== 1 ? 's' : ''}</span>
+                              </div>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {riskFlagsBySeverity.low.map((flag, index) => (
+                              <SelectItem key={index} value={index.toString()}>
+                                {flag.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {getSelectedFlag('low') && (
+                          <div className="p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {getSelectedFlag('low')!.description}
+                            </p>
+                            {getSelectedFlag('low')!.repo && (
+                              <div className="text-xs text-muted-foreground">
+                                Repo: <span className="font-mono">{getSelectedFlag('low')!.repo}</span>
+                              </div>
+                            )}
+                            {getSelectedFlag('low')!.contributor && !selectedContributor && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Contributor: <span className="font-mono">{getSelectedFlag('low')!.contributor}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">

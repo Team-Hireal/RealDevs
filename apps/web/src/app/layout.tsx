@@ -6,8 +6,11 @@ import { Providers } from "@/components/providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "RealDevs - Team Momentum Analytics",
-  description: "Track team momentum and identify risks without surveillance",
+  title: "RealDevs - Team Trend Analytics",
+  description: "Track team trends and identify risks without surveillance",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

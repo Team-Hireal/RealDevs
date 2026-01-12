@@ -39,7 +39,7 @@ export interface DashboardData {
     total_prs_opened: number
     total_prs_merged: number
     total_issues_closed: number
-    momentum_score: number
+    average_trend: number
     internal_commits: number
     external_commits: number
     internal_percentage: number
@@ -52,7 +52,7 @@ export interface DashboardData {
     prs_opened: number
     prs_merged: number
     issues_closed: number
-    momentum_score: number
+    average_trend: number
     last_synced: string | null
   }>
   risk_flags: Array<{
@@ -72,7 +72,7 @@ export interface DashboardData {
     prs_opened: number
     prs_merged: number
     issues_closed: number
-    momentum_score: number
+    average_trend: number
   }>
   last_synced: string | null
   range_days: number

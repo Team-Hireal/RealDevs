@@ -29,7 +29,7 @@ export interface Contributor {
   prs_opened: number;
   prs_merged: number;
   issues_closed: number;
-  momentum_score: number;
+  average_trend: number;
 }
 
 export interface TeamSummary {
@@ -37,7 +37,7 @@ export interface TeamSummary {
   total_prs_opened: number;
   total_prs_merged: number;
   total_issues_closed: number;
-  momentum_score: number;
+  average_trend: number;
   internal_commits: number;
   external_commits: number;
   internal_percentage: number;
@@ -51,7 +51,7 @@ export interface RepoSummary {
   prs_opened: number;
   prs_merged: number;
   issues_closed: number;
-  momentum_score: number;
+  average_trend: number;
   last_synced: string | null;
 }
 
