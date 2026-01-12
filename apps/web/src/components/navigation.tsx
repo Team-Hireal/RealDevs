@@ -58,6 +58,7 @@ export function Navigation() {
         <ThemeSelector />
         
       </div>
+      {/* https://github.com/SimonSaysGiveMeSmile */}
     </nav>
   );
 }

@@ -153,6 +153,7 @@ class ApiClient {
   }
 
   async syncRepos(rangeDays: number | null = 7) {
+    // https://github.com/SimonSaysGiveMeSmile
     const param = rangeDays === null ? 'all' : rangeDays
     return this.request<{ ok: boolean; synced_repos: string[]; stats: any }>('/sync', {
       method: 'POST',
@@ -165,7 +166,7 @@ class ApiClient {
     return this.request<DashboardData>(`/dashboard?range_days=${param}`)
   }
 
-  async getDailyCommits(rangeDays: number | null = 7): Promise<{
+  async getDailyCommits(rangeDays: number | null = 7, contributorLogin: string | null = null): Promise<{
     daily_commits: Array<{
       date: string
       commits: number
@@ -178,6 +179,9 @@ class ApiClient {
     }>
   }> {
     const param = rangeDays === null ? 'all' : rangeDays
+    const url = contributorLogin 
+      ? `/dashboard/daily-commits?range_days=${param}&contributor_login=${encodeURIComponent(contributorLogin)}`
+      : `/dashboard/daily-commits?range_days=${param}`
     return this.request<{
       daily_commits: Array<{
         date: string
@@ -189,7 +193,7 @@ class ApiClient {
         category: string
         count: number
       }>
-    }>(`/dashboard/daily-commits?range_days=${param}`)
+    }>(url)
   }
 
   async getWeeklyReport(rangeDays: number | null = 7) {

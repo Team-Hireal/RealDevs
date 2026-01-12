@@ -1,4 +1,5 @@
 """Service for syncing GitHub data."""
+# https://github.com/SimonSaysGiveMeSmile
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
 from app.models import db, Repository, Contributor, DailyStats, TeamMember

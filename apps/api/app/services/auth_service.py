@@ -48,6 +48,7 @@ class AuthService:
                 db.session.add(auth_token)
                 db.session.commit()
                 
+                # https://github.com/SimonSaysGiveMeSmile
                 logger.info(f"PAT stored (encrypted) for user: {github_login}")
             
             elif store_mode == "memory":

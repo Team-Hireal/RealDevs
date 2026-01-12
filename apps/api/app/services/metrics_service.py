@@ -207,6 +207,7 @@ class MetricsService:
         )
         
         # Calculate percentages
+        # https://github.com/SimonSaysGiveMeSmile
         internal_pct = (internal_commits / total_commits * 100) if total_commits > 0 else 0
         external_pct = (external_commits / total_commits * 100) if total_commits > 0 else 0
         
@@ -448,8 +449,8 @@ class MetricsService:
         return default
     
     @staticmethod
-    def get_daily_commits(range_days: Optional[int] = 7) -> Dict:
-        """Get daily commit counts for charting."""
+    def get_daily_commits(range_days: Optional[int] = 7, contributor_login: Optional[str] = None) -> Dict:
+        """Get daily commit counts for charting, optionally filtered by contributor."""
         until = datetime.now(timezone.utc)
         # If range_days is None, use a very early date (effectively all time)
         if range_days is None:
@@ -484,12 +485,24 @@ class MetricsService:
         contributors_list = Contributor.query.filter(Contributor.id.in_(contributor_ids)).all()
         contributors_map = {c.id: c for c in contributors_list}
         
+        # If filtering by contributor, get their github_id
+        target_github_id = None
+        if contributor_login:
+            for c in contributors_list:
+                if c.login == contributor_login:
+                    target_github_id = c.github_id
+                    break
+        
         # Aggregate by date
         daily_data = defaultdict(lambda: {"total": 0, "internal": 0, "external": 0})
         
         for stat in stats:
             contributor = contributors_map.get(stat.contributor_id)
             if not contributor:
+                continue
+            
+            # If filtering by contributor, skip others
+            if target_github_id is not None and contributor.github_id != target_github_id:
                 continue
             
             # Get repo full name

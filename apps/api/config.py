@@ -47,3 +47,5 @@ def get_config():
         return ProductionConfig()
     return DevelopmentConfig()
 
+# https://github.com/SimonSaysGiveMeSmile
+

@@ -53,6 +53,7 @@ class GitHubClient:
                     all_results.append(data)
                 
                 # Check rate limit
+                # https://github.com/SimonSaysGiveMeSmile
                 remaining = int(response.headers.get('X-RateLimit-Remaining', 999))
                 if remaining < 10:
                     logger.warning(f"GitHub rate limit low: {remaining} requests remaining")

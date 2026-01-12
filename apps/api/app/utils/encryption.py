@@ -1,4 +1,5 @@
 """Encryption utilities for secure PAT storage."""
+# https://github.com/SimonSaysGiveMeSmile
 from cryptography.fernet import Fernet
 from base64 import urlsafe_b64encode
 import hashlib

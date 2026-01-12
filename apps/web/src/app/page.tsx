@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   LayoutDashboard, 
   TrendingUp, 
@@ -27,6 +28,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 export default function DashboardPage() {
   const [rangeDays, setRangeDays] = useState<number | null>(7);
   const [copied, setCopied] = useState(false);
+  const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: dashboardData, isLoading } = useQuery({
@@ -42,8 +44,8 @@ export default function DashboardPage() {
   });
 
   const { data: dailyCommitsData } = useQuery({
-    queryKey: ["daily-commits", rangeDays],
-    queryFn: () => api.getDailyCommits(rangeDays),
+    queryKey: ["daily-commits", rangeDays, selectedContributor],
+    queryFn: () => api.getDailyCommits(rangeDays, selectedContributor),
     enabled: !!dashboardData,
   });
 
@@ -82,6 +84,54 @@ export default function DashboardPage() {
 
   const topContributor = dashboardData?.contributors
     ?.sort((a, b) => b.momentum_score - a.momentum_score)[0];
+
+  const selectedContributorData = useMemo(() => {
+    if (!selectedContributor || !dashboardData?.contributors) return null;
+    return dashboardData.contributors.find(c => c.login === selectedContributor);
+  }, [selectedContributor, dashboardData?.contributors]);
+
+  const sortedContributors = useMemo(() => {
+    if (!dashboardData?.contributors) return [];
+    return [...dashboardData.contributors].sort((a, b) => b.momentum_score - a.momentum_score);
+  }, [dashboardData?.contributors]);
+
+  // Computed metrics that switch between team and individual contributor data
+  const displayMetrics = useMemo(() => {
+    if (selectedContributorData) {
+      // Calculate individual contributor's internal/external split
+      const totalCommits = selectedContributorData.commits;
+      const internalPercentage = selectedContributorData.is_internal ? 100 : 0;
+      const externalPercentage = selectedContributorData.is_internal ? 0 : 100;
+      
+      return {
+        totalCommits: selectedContributorData.commits,
+        momentumScore: selectedContributorData.momentum_score,
+        internalPercentage,
+        externalPercentage,
+        isIndividual: true,
+      };
+    }
+    
+    // Team-wide data
+    return {
+      totalCommits: dashboardData?.team_summary.total_commits || 0,
+      momentumScore: dashboardData?.team_summary.momentum_score || 0,
+      internalPercentage: dashboardData?.team_summary.internal_percentage || 0,
+      externalPercentage: dashboardData?.team_summary.external_percentage || 0,
+      isIndividual: false,
+    };
+  }, [selectedContributorData, dashboardData]);
+
+  // Filter risk flags for selected contributor
+  const displayRiskFlags = useMemo(() => {
+    if (!dashboardData?.risk_flags) return [];
+    if (!selectedContributor) return dashboardData.risk_flags;
+    
+    // Filter to only show flags related to the selected contributor
+    return dashboardData.risk_flags.filter(
+      flag => flag.contributor === selectedContributor
+    );
+  }, [dashboardData?.risk_flags, selectedContributor]);
 
   if (isLoading) {
     return (
@@ -186,18 +236,18 @@ export default function DashboardPage() {
             <Card className="glass-card glow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Code Commitment
+                  {selectedContributor ? `${selectedContributor}'s Commits` : "Total Code Commitment"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold accent-text mb-1">
-                  {dashboardData?.team_summary.total_commits || 0}
+                  {displayMetrics.totalCommits}
                 </div>
                 <p className="text-xs text-muted-foreground">Commits</p>
                 <div className="mt-3 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-green-500" />
                   <span className="text-xs text-muted-foreground">
-                    Momentum: {formatMomentumScore(dashboardData?.team_summary.momentum_score || 0)}
+                    Momentum: {formatMomentumScore(displayMetrics.momentumScore)}
                   </span>
                 </div>
               </CardContent>
@@ -207,7 +257,7 @@ export default function DashboardPage() {
             <Card className="glass-card glow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Contribution Split
+                  {selectedContributor ? "Contributor Type" : "Contribution Split"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -215,40 +265,40 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Internal</span>
                     <span className="text-lg font-bold accent-text">
-                      {dashboardData?.team_summary.internal_percentage.toFixed(0) || 0}%
+                      {displayMetrics.internalPercentage.toFixed(0)}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">External</span>
                     <span className="text-lg font-bold">
-                      {dashboardData?.team_summary.external_percentage.toFixed(0) || 0}%
+                      {displayMetrics.externalPercentage.toFixed(0)}%
                     </span>
                   </div>
                   <div className="h-2 bg-secondary rounded-full overflow-hidden mt-2">
                     <div 
                       className="h-full accent-bg transition-all"
-                      style={{ width: `${dashboardData?.team_summary.internal_percentage || 0}%` }}
+                      style={{ width: `${displayMetrics.internalPercentage}%` }}
                     />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Top Contributor */}
+            {/* Top Contributor / Selected Contributor */}
             <Card className="glass-card glow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Top Contributor
+                  {selectedContributor ? "Selected Contributor" : "Top Contributor"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {topContributor ? (
+                {(selectedContributorData || topContributor) ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      {topContributor.avatar_url ? (
+                      {(selectedContributorData || topContributor)?.avatar_url ? (
                         <img 
-                          src={topContributor.avatar_url} 
-                          alt={topContributor.login}
+                          src={(selectedContributorData || topContributor)!.avatar_url} 
+                          alt={(selectedContributorData || topContributor)!.login}
                           className="w-8 h-8 rounded-full"
                         />
                       ) : (
@@ -257,14 +307,14 @@ export default function DashboardPage() {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold truncate">{topContributor.login}</div>
+                        <div className="font-semibold truncate">{(selectedContributorData || topContributor)!.login}</div>
                         <div className="text-xs text-muted-foreground">
-                          {topContributor.is_internal ? "Internal" : "External"}
+                          {(selectedContributorData || topContributor)!.is_internal ? "Internal" : "External"}
                         </div>
                       </div>
                     </div>
                     <div className="text-lg font-bold accent-text">
-                      {formatMomentumScore(topContributor.momentum_score)}
+                      {formatMomentumScore((selectedContributorData || topContributor)!.momentum_score)}
                     </div>
                     <p className="text-xs text-muted-foreground">Momentum Score</p>
                   </div>
@@ -278,29 +328,34 @@ export default function DashboardPage() {
             <Card className="glass-card glow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Risk Flags
+                  {selectedContributor ? `${selectedContributor}'s Risk Flags` : "Risk Flags"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold accent-text mb-1">
-                  {dashboardData?.risk_flags.length || 0}
+                  {displayRiskFlags.length}
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">Active alerts</p>
-                <div className="flex gap-1">
-                  {dashboardData?.risk_flags && dashboardData.risk_flags.filter(f => f.severity === "high").length > 0 && (
+                <p className="text-xs text-muted-foreground mb-3">
+                  {selectedContributor ? "Personal alerts" : "Active alerts"}
+                </p>
+                <div className="flex gap-1 flex-wrap">
+                  {displayRiskFlags.filter(f => f.severity === "high").length > 0 && (
                     <Badge variant="destructive" className="text-xs">
-                      {dashboardData.risk_flags.filter(f => f.severity === "high").length} High
+                      {displayRiskFlags.filter(f => f.severity === "high").length} High
                     </Badge>
                   )}
-                  {dashboardData?.risk_flags && dashboardData.risk_flags.filter(f => f.severity === "medium").length > 0 && (
+                  {displayRiskFlags.filter(f => f.severity === "medium").length > 0 && (
                     <Badge variant="default" className="text-xs">
-                      {dashboardData.risk_flags.filter(f => f.severity === "medium").length} Med
+                      {displayRiskFlags.filter(f => f.severity === "medium").length} Med
                     </Badge>
                   )}
-                  {dashboardData?.risk_flags && dashboardData.risk_flags.filter(f => f.severity === "low").length > 0 && (
+                  {displayRiskFlags.filter(f => f.severity === "low").length > 0 && (
                     <Badge variant="secondary" className="text-xs">
-                      {dashboardData.risk_flags.filter(f => f.severity === "low").length} Low
+                      {displayRiskFlags.filter(f => f.severity === "low").length} Low
                     </Badge>
+                  )}
+                  {displayRiskFlags.length === 0 && selectedContributor && (
+                    <span className="text-xs text-muted-foreground">No flags</span>
                   )}
                 </div>
               </CardContent>
@@ -315,9 +370,16 @@ export default function DashboardPage() {
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
                   Daily Commits
+                  {selectedContributor && (
+                    <Badge variant="secondary" className="ml-2">
+                      {selectedContributor}
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
-                  Commit activity over time
+                  {selectedContributor 
+                    ? `Individual commit activity for ${selectedContributor}` 
+                    : "Team commit activity over time"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -367,9 +429,16 @@ export default function DashboardPage() {
                 <CardTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   Contribution Split
+                  {selectedContributor && (
+                    <Badge variant="secondary" className="ml-2">
+                      {selectedContributor}
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
-                  Internal vs External contributions
+                  {selectedContributor 
+                    ? `${selectedContributor}'s internal vs external contributions` 
+                    : "Team internal vs external contributions"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -410,66 +479,197 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Top Contributors Ranking */}
+          {/* Contributors Section */}
           <Card className="glass-card glow mb-8">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                Top Contributors Ranking
-              </CardTitle>
-              <CardDescription>
-                Top 10 contributors sorted by momentum score
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Contributors
+                  </CardTitle>
+                  <CardDescription>
+                    {selectedContributor ? "Individual contributor details" : "Top contributors sorted by momentum score"}
+                  </CardDescription>
+                </div>
+                <div className="w-64">
+                  <Select 
+                    value={selectedContributor || "all"} 
+                    onValueChange={(value) => setSelectedContributor(value === "all" ? null : value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select contributor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Contributors</SelectItem>
+                      {sortedContributors.map((contributor) => (
+                        <SelectItem key={contributor.login} value={contributor.login}>
+                          {contributor.login} {contributor.is_internal ? "(Internal)" : "(External)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {dashboardData?.contributors && dashboardData.contributors.length > 0 ? (
-                <div className="space-y-3">
-                  {dashboardData.contributors
-                    .slice(0, 10)
-                    .map((contributor, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-4 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 transition-colors"
-                      >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold">
-                          {index + 1}
-                        </div>
-                        {contributor.avatar_url ? (
-                          <img 
-                            src={contributor.avatar_url} 
-                            alt={contributor.login}
-                            className="w-10 h-10 rounded-full"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                            <Users className="w-5 h-5" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold">{contributor.login}</div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{contributor.commits} commits</span>
-                            <span>•</span>
-                            <span>{contributor.prs_merged} PRs</span>
-                          </div>
-                        </div>
-                        <Badge variant={contributor.is_internal ? "default" : "secondary"}>
-                          {contributor.is_internal ? "Internal" : "External"}
+              {selectedContributorData ? (
+                /* Individual Contributor View */
+                <div className="space-y-6">
+                  {/* Contributor Profile Header */}
+                  <div className="flex items-center gap-4 p-4 rounded-lg border border-border bg-secondary/30">
+                    {selectedContributorData.avatar_url ? (
+                      <img 
+                        src={selectedContributorData.avatar_url} 
+                        alt={selectedContributorData.login}
+                        className="w-16 h-16 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
+                        <Users className="w-8 h-8" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <h3 className="text-2xl font-bold">{selectedContributorData.login}</h3>
+                      {selectedContributorData.name && (
+                        <p className="text-muted-foreground">{selectedContributorData.name}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant={selectedContributorData.is_internal ? "default" : "secondary"}>
+                          {selectedContributorData.is_internal ? "Internal" : "External"}
                         </Badge>
-                        <div className="text-right">
-                          <div className="font-bold accent-text text-lg">
-                            {formatMomentumScore(contributor.momentum_score)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">momentum</div>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <TrendingUp className="w-4 h-4" />
+                          <span>Momentum: {formatMomentumScore(selectedContributorData.momentum_score)}</span>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  </div>
+
+                  {/* Contributor Metrics Grid */}
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <GitCommit className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Commits</span>
+                      </div>
+                      <div className="text-2xl font-bold accent-text">
+                        {selectedContributorData.commits}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <GitPullRequest className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">PRs Opened</span>
+                      </div>
+                      <div className="text-2xl font-bold accent-text">
+                        {selectedContributorData.prs_opened}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">PRs Merged</span>
+                      </div>
+                      <div className="text-2xl font-bold accent-text">
+                        {selectedContributorData.prs_merged}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Issues Closed</span>
+                      </div>
+                      <div className="text-2xl font-bold accent-text">
+                        {selectedContributorData.issues_closed}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contributor Performance Summary */}
+                  <div className="p-4 rounded-lg border border-border bg-secondary/20">
+                    <h4 className="font-semibold mb-3">Performance Summary</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">PR Success Rate:</span>
+                        <span className="font-semibold">
+                          {selectedContributorData.prs_opened > 0
+                            ? `${((selectedContributorData.prs_merged / selectedContributorData.prs_opened) * 100).toFixed(1)}%`
+                            : "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Avg Commits per PR:</span>
+                        <span className="font-semibold">
+                          {selectedContributorData.prs_merged > 0
+                            ? (selectedContributorData.commits / selectedContributorData.prs_merged).toFixed(1)
+                            : "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Momentum Score:</span>
+                        <span className="font-semibold accent-text">
+                          {formatMomentumScore(selectedContributorData.momentum_score)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No contributors data available</p>
-                </div>
+                /* All Contributors Ranking View */
+                dashboardData?.contributors && dashboardData.contributors.length > 0 ? (
+                  <div className="space-y-3">
+                    {sortedContributors
+                      .slice(0, 10)
+                      .map((contributor, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-4 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer"
+                          onClick={() => setSelectedContributor(contributor.login)}
+                        >
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold">
+                            {index + 1}
+                          </div>
+                          {contributor.avatar_url ? (
+                            <img 
+                              src={contributor.avatar_url} 
+                              alt={contributor.login}
+                              className="w-10 h-10 rounded-full"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                              <Users className="w-5 h-5" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold">{contributor.login}</div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>{contributor.commits} commits</span>
+                              <span>•</span>
+                              <span>{contributor.prs_merged} PRs</span>
+                            </div>
+                          </div>
+                          <Badge variant={contributor.is_internal ? "default" : "secondary"}>
+                            {contributor.is_internal ? "Internal" : "External"}
+                          </Badge>
+                          <div className="text-right">
+                            <div className="font-bold accent-text text-lg">
+                              {formatMomentumScore(contributor.momentum_score)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">momentum</div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No contributors data available</p>
+                  </div>
+                )
               )}
             </CardContent>
           </Card>
@@ -481,15 +681,22 @@ export default function DashboardPage() {
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5" />
                   Risk Flags
+                  {selectedContributor && (
+                    <Badge variant="secondary" className="ml-2">
+                      {selectedContributor}
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
-                  Active alerts and warnings for your team
+                  {selectedContributor 
+                    ? `Alerts and warnings for ${selectedContributor}` 
+                    : "Active alerts and warnings for your team"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {dashboardData?.risk_flags && dashboardData.risk_flags.length > 0 ? (
+                {displayRiskFlags.length > 0 ? (
                   <div className="space-y-3">
-                    {dashboardData.risk_flags.map((flag, index) => (
+                    {displayRiskFlags.map((flag, index) => (
                       <div
                         key={index}
                         className="p-3 rounded-lg border border-border bg-secondary/30"
@@ -506,11 +713,12 @@ export default function DashboardPage() {
                           {flag.description}
                         </p>
                         {flag.repo && (
-                          <div className="text-xs text-muted-foreground">
-                            Repo: <span className="font-mono">{flag.repo}</span>
-                          </div>
-                        )}
-                        {flag.contributor && (
+                  <div className="text-xs text-muted-foreground">
+                    Repo: <span className="font-mono">{flag.repo}</span>
+                  </div>
+                )}
+                        {/* https://github.com/SimonSaysGiveMeSmile */}
+                        {flag.contributor && !selectedContributor && (
                           <div className="text-xs text-muted-foreground">
                             Contributor: <span className="font-mono">{flag.contributor}</span>
                           </div>
@@ -521,7 +729,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No risk flags at this time</p>
+                    <p>{selectedContributor ? `No risk flags for ${selectedContributor}` : "No risk flags at this time"}</p>
                   </div>
                 )}
               </CardContent>
