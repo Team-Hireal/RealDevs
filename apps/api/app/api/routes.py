@@ -2,7 +2,8 @@
 from flask import jsonify, request
 from app.api import api_bp
 from app.api.schemas import (
-    PatSubmission, RepoSelection, SyncRequest, TeamMemberUpdate, SettingsUpdate
+    PatSubmission, RepoSelection, SyncRequest, TeamMemberUpdate, SettingsUpdate,
+    InternalOrgsUpdate
 )
 from app.services.auth_service import AuthService
 from app.services.sync_service import SyncService
@@ -284,5 +285,62 @@ def reset_all():
         })
     except Exception as e:
         logger.error(f"Error resetting data: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@api_bp.route('/internal-orgs', methods=['GET'])
+def get_internal_orgs():
+    """Get internal organizations and repos configuration."""
+    try:
+        import json
+        
+        # Get from settings
+        orgs_setting = Settings.query.filter_by(key='internal_organizations').first()
+        repos_setting = Settings.query.filter_by(key='internal_repos').first()
+        
+        organizations = json.loads(orgs_setting.value) if orgs_setting else []
+        repos = json.loads(repos_setting.value) if repos_setting else []
+        
+        return jsonify({
+            "organizations": organizations,
+            "repos": repos
+        })
+    except Exception as e:
+        logger.error(f"Error getting internal orgs: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@api_bp.route('/internal-orgs', methods=['POST'])
+@validate_request(InternalOrgsUpdate)
+def update_internal_orgs(data: InternalOrgsUpdate):
+    """Update internal organizations and repos configuration."""
+    try:
+        import json
+        
+        # Update organizations
+        orgs_setting = Settings.query.filter_by(key='internal_organizations').first()
+        if orgs_setting:
+            orgs_setting.value = json.dumps(data.organizations)
+        else:
+            orgs_setting = Settings(key='internal_organizations', value=json.dumps(data.organizations))
+            db.session.add(orgs_setting)
+        
+        # Update repos
+        repos_setting = Settings.query.filter_by(key='internal_repos').first()
+        if repos_setting:
+            repos_setting.value = json.dumps(data.repos)
+        else:
+            repos_setting = Settings(key='internal_repos', value=json.dumps(data.repos))
+            db.session.add(repos_setting)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "ok": True,
+            "message": f"Updated {len(data.organizations)} internal organizations and {len(data.repos)} specific repos"
+        })
+    except Exception as e:
+        logger.error(f"Error updating internal orgs: {e}")
+        db.session.rollback()
         return jsonify({"ok": False, "error": str(e)}), 500
 

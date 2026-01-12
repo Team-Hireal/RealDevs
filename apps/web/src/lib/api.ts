@@ -88,6 +88,11 @@ export interface Settings {
   [key: string]: string
 }
 
+export interface InternalOrgsConfig {
+  organizations: string[]
+  repos: string[]
+}
+
 class ApiClient {
   private baseUrl: string
 
@@ -190,6 +195,17 @@ class ApiClient {
   async resetAll() {
     return this.request<{ ok: boolean; message: string }>('/reset', {
       method: 'POST',
+    })
+  }
+
+  async getInternalOrgs() {
+    return this.request<InternalOrgsConfig>('/internal-orgs')
+  }
+
+  async updateInternalOrgs(organizations: string[], repos: string[] = []) {
+    return this.request<{ ok: boolean; message: string }>('/internal-orgs', {
+      method: 'POST',
+      body: JSON.stringify({ organizations, repos }),
     })
   }
 }

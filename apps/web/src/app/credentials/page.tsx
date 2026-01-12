@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select } from "@/components/ui/select";
 import { 
   Key, 
   CheckCircle, 
@@ -19,7 +20,10 @@ import {
   Users,
   Github,
   Search,
-  Loader2
+  Loader2,
+  Building2,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 export default function CredentialsPage() {
@@ -27,6 +31,9 @@ export default function CredentialsPage() {
   const [showPat, setShowPat] = useState(false);
   const [newMember, setNewMember] = useState("");
   const [members, setMembers] = useState<string[]>([]);
+  const [internalOrgs, setInternalOrgs] = useState<string[]>([]);
+  const [internalRepos, setInternalRepos] = useState<string[]>([]);
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
   const { data: authStatus } = useQuery({
@@ -48,6 +55,12 @@ export default function CredentialsPage() {
   const { data: availableRepos } = useQuery({
     queryKey: ["available-repos"],
     queryFn: () => api.listRepos(),
+    enabled: authStatus?.configured,
+  });
+
+  const { data: internalOrgsConfig } = useQuery({
+    queryKey: ["internal-orgs"],
+    queryFn: () => api.getInternalOrgs(),
     enabled: authStatus?.configured,
   });
 
@@ -86,12 +99,29 @@ export default function CredentialsPage() {
     },
   });
 
+  const internalOrgsMutation = useMutation({
+    mutationFn: ({ organizations, repos }: { organizations: string[], repos: string[] }) => 
+      api.updateInternalOrgs(organizations, repos),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["internal-orgs"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+
   // Initialize members from server
   useEffect(() => {
     if (teamMembers?.members) {
       setMembers(teamMembers.members.map(m => m.github_login));
     }
   }, [teamMembers]);
+
+  // Initialize internal organizations from server
+  useEffect(() => {
+    if (internalOrgsConfig) {
+      setInternalOrgs(internalOrgsConfig.organizations || []);
+      setInternalRepos(internalOrgsConfig.repos || []);
+    }
+  }, [internalOrgsConfig]);
 
   const handleAddMember = () => {
     if (newMember && !members.includes(newMember)) {
@@ -121,6 +151,59 @@ export default function CredentialsPage() {
   const handleSaveRepos = () => {
     selectReposMutation.mutate(Array.from(selectedRepoFullNames));
   };
+
+  const handleToggleOrg = (org: string) => {
+    const updated = [...internalOrgs];
+    const index = updated.indexOf(org);
+    if (index >= 0) {
+      updated.splice(index, 1);
+      // Also remove all repos from this org
+      const updatedRepos = internalRepos.filter(r => !r.startsWith(`${org}/`));
+      setInternalRepos(updatedRepos);
+    } else {
+      updated.push(org);
+    }
+    setInternalOrgs(updated);
+  };
+
+  const handleToggleInternalRepo = (repoFullName: string) => {
+    const updated = [...internalRepos];
+    const index = updated.indexOf(repoFullName);
+    if (index >= 0) {
+      updated.splice(index, 1);
+    } else {
+      updated.push(repoFullName);
+    }
+    setInternalRepos(updated);
+  };
+
+  const handleSaveInternalOrgs = () => {
+    internalOrgsMutation.mutate({ organizations: internalOrgs, repos: internalRepos });
+  };
+
+  const toggleOrgExpansion = (org: string) => {
+    const updated = new Set(expandedOrgs);
+    if (updated.has(org)) {
+      updated.delete(org);
+    } else {
+      updated.add(org);
+    }
+    setExpandedOrgs(updated);
+  };
+
+  // Extract unique organizations from available repos
+  const uniqueOrgs = availableRepos 
+    ? Array.from(new Set(availableRepos.repos.map(r => r.owner))).sort()
+    : [];
+
+  // Group repos by organization
+  const reposByOrg = availableRepos 
+    ? availableRepos.repos.reduce((acc, repo) => {
+        if (!acc[repo.owner]) acc[repo.owner] = [];
+        acc[repo.owner].push(repo);
+        return acc;
+      }, {} as Record<string, typeof availableRepos.repos>)
+    : {};
 
   // Update selected repos when data loads from server (initial load only)
   useEffect(() => {
@@ -343,6 +426,161 @@ export default function CredentialsPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Internal/External Organizations */}
+          {authStatus?.configured && (
+            <Card className="glass-card glow mb-8">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  Internal vs External
+                </CardTitle>
+                <CardDescription>
+                  Specify which organizations are considered &quot;internal&quot; (everything else is &quot;external&quot;)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {uniqueOrgs.length > 0 ? (
+                  <>
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold">Select Internal Organizations</h4>
+                      <div className="max-h-96 overflow-y-auto space-y-2 border rounded-lg p-3">
+                        {uniqueOrgs.map((org) => {
+                          const isOrgInternal = internalOrgs.includes(org);
+                          const orgRepos = reposByOrg[org] || [];
+                          const isExpanded = expandedOrgs.has(org);
+                          
+                          return (
+                            <div key={org} className="space-y-2">
+                              <div className="flex items-center gap-3 p-2 rounded hover:bg-secondary/50">
+                                <input
+                                  type="checkbox"
+                                  checked={isOrgInternal}
+                                  onChange={() => handleToggleOrg(org)}
+                                  className="w-4 h-4 accent-primary"
+                                />
+                                <div className="flex-1 flex items-center gap-2">
+                                  <Building2 className="w-4 h-4" />
+                                  <span className="font-mono text-sm font-semibold">{org}</span>
+                                  <Badge variant={isOrgInternal ? "default" : "secondary"} className="text-xs">
+                                    {isOrgInternal ? "Internal" : "External"}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    ({orgRepos.length} {orgRepos.length === 1 ? 'repo' : 'repos'})
+                                  </span>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleOrgExpansion(org)}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4" />
+                                  )}
+                                </Button>
+                              </div>
+                              
+                              {/* Collapsible repo selection */}
+                              {isExpanded && orgRepos.length > 0 && (
+                                <div className="ml-6 pl-4 border-l-2 border-secondary space-y-1">
+                                  {orgRepos.map((repo) => {
+                                    const isRepoInternal = internalRepos.includes(repo.full_name);
+                                    
+                                    return (
+                                      <label
+                                        key={repo.id}
+                                        className="flex items-center gap-3 p-2 rounded hover:bg-secondary/30 cursor-pointer"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isRepoInternal}
+                                          onChange={() => handleToggleInternalRepo(repo.full_name)}
+                                          className="w-3.5 h-3.5 accent-primary"
+                                        />
+                                        <div className="flex-1 flex items-center gap-2">
+                                          <Github className="w-3.5 h-3.5" />
+                                          <span className="font-mono text-xs">{repo.name}</span>
+                                          {repo.private && (
+                                            <Badge variant="secondary" className="text-xs">Private</Badge>
+                                          )}
+                                        </div>
+                                        <Badge 
+                                          variant={isRepoInternal ? "default" : "outline"} 
+                                          className="text-xs"
+                                        >
+                                          {isRepoInternal ? "Internal" : "External"}
+                                        </Badge>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleSaveInternalOrgs}
+                      disabled={internalOrgsMutation.isPending}
+                      className="w-full"
+                    >
+                      {internalOrgsMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          Save Internal Configuration ({internalOrgs.length} orgs, {internalRepos.length} specific repos)
+                        </>
+                      )}
+                    </Button>
+
+                    {internalOrgsMutation.isError && (
+                      <p className="text-sm text-destructive">
+                        Failed to save internal configuration
+                      </p>
+                    )}
+
+                    {internalOrgsMutation.isSuccess && (
+                      <p className="text-sm text-green-600 dark:text-green-400">
+                        Internal configuration saved successfully
+                      </p>
+                    )}
+
+                    {internalOrgs.length > 0 && (
+                      <div className="p-4 rounded-lg bg-secondary/30 border border-secondary">
+                        <h4 className="text-sm font-semibold mb-2">Current Configuration</h4>
+                        <div className="space-y-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Internal Organizations: </span>
+                            <span className="font-mono">{internalOrgs.join(', ')}</span>
+                          </div>
+                          {internalRepos.length > 0 && (
+                            <div>
+                              <span className="text-muted-foreground">Specific Internal Repos: </span>
+                              <span className="font-mono">{internalRepos.length} selected</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Building2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No organizations found</p>
+                    <p className="text-sm">Select repositories first to configure internal/external settings</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Team Members Management */}
           <Card className="glass-card glow">

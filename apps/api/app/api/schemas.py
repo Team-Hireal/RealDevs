@@ -27,6 +27,11 @@ class SettingsUpdate(BaseModel):
     value: str
 
 
+class InternalOrgsUpdate(BaseModel):
+    organizations: List[str]
+    repos: Optional[List[str]] = Field(default_factory=list)
+
+
 # Response schemas
 class UserInfo(BaseModel):
     login: str
