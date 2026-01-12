@@ -117,20 +117,67 @@ def sync_repos():
     """Sync selected repos."""
     try:
         data = request.get_json() or {}
-        range_days = data.get('range_days', 7)
+        range_days_param = data.get('range_days', 7)
+        # Handle "all" for all-time sync (use a large number like 3650 days ~10 years)
+        if range_days_param == 'all':
+            range_days = 3650  # ~10 years, effectively all time
+        else:
+            range_days = int(range_days_param)
         
         result = SyncService.sync_repos(range_days=range_days)
-        return jsonify(result)
+        # Return 200 even if some repos failed, but include error info
+        status_code = 200 if result.get("ok") or result.get("synced_repos") else 400
+        return jsonify(result), status_code
     except Exception as e:
-        logger.error(f"Error syncing repos: {e}")
+        logger.error(f"Error syncing repos: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@api_bp.route('/diagnostics', methods=['GET'])
+def diagnostics():
+    """Get diagnostic information about the current state."""
+    from app.models import Repository, Contributor, DailyStats, AuthToken, TeamMember
+    
+    repos = Repository.query.all()
+    contributors = Contributor.query.all()
+    stats = DailyStats.query.all()
+    auth = AuthToken.query.first()
+    team_members = TeamMember.query.filter_by(is_active=True).all()
+    
+    # Get recent stats
+    from datetime import datetime, timedelta, timezone
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    recent_stats = DailyStats.query.filter(DailyStats.date >= week_ago).all()
+    
+    return jsonify({
+        "pat_configured": auth is not None,
+        "github_user": auth.github_user_login if auth else None,
+        "repos_selected": len(repos),
+        "repos": [
+            {
+                "full_name": r.full_name,
+                "last_synced": r.last_synced_at.isoformat() if r.last_synced_at else None
+            }
+            for r in repos
+        ],
+        "contributors_count": len(contributors),
+        "daily_stats_count": len(stats),
+        "recent_stats_count": len(recent_stats),
+        "team_members_count": len(team_members),
+        "ready_to_sync": len(repos) > 0 and auth is not None
+    })
 
 
 @api_bp.route('/dashboard', methods=['GET'])
 def dashboard():
     """Get dashboard data."""
     try:
-        range_days = request.args.get('range_days', default=7, type=int)
+        range_days_param = request.args.get('range_days', default='7')
+        # Handle "all" for all-time data
+        if range_days_param == 'all':
+            range_days = None
+        else:
+            range_days = int(range_days_param)
         data = MetricsService.get_dashboard_data(range_days)
         return jsonify(data)
     except Exception as e:
@@ -142,7 +189,12 @@ def dashboard():
 def weekly_report():
     """Get weekly recap text."""
     try:
-        range_days = request.args.get('range_days', default=7, type=int)
+        range_days_param = request.args.get('range_days', default='7')
+        # Handle "all" for all-time data
+        if range_days_param == 'all':
+            range_days = None
+        else:
+            range_days = int(range_days_param)
         text = MetricsService.get_weekly_recap(range_days)
         return jsonify({"text": text})
     except Exception as e:

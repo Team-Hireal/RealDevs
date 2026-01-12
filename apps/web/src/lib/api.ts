@@ -147,19 +147,22 @@ class ApiClient {
     })
   }
 
-  async syncRepos(rangeDays: number = 7) {
+  async syncRepos(rangeDays: number | null = 7) {
+    const param = rangeDays === null ? 'all' : rangeDays
     return this.request<{ ok: boolean; synced_repos: string[]; stats: any }>('/sync', {
       method: 'POST',
-      body: JSON.stringify({ range_days: rangeDays }),
+      body: JSON.stringify({ range_days: param }),
     })
   }
 
-  async getDashboard(rangeDays: number = 7): Promise<DashboardData> {
-    return this.request<DashboardData>(`/dashboard?range_days=${rangeDays}`)
+  async getDashboard(rangeDays: number | null = 7): Promise<DashboardData> {
+    const param = rangeDays === null ? 'all' : rangeDays
+    return this.request<DashboardData>(`/dashboard?range_days=${param}`)
   }
 
-  async getWeeklyReport(rangeDays: number = 7) {
-    return this.request<{ text: string }>(`/report/weekly?range_days=${rangeDays}`)
+  async getWeeklyReport(rangeDays: number | null = 7) {
+    const param = rangeDays === null ? 'all' : rangeDays
+    return this.request<{ text: string }>(`/report/weekly?range_days=${param}`)
   }
 
   async getTeamMembers() {

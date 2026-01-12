@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
@@ -17,7 +17,9 @@ import {
   Eye,
   EyeOff,
   Users,
-  Github
+  Github,
+  Search,
+  Loader2
 } from "lucide-react";
 
 export default function CredentialsPage() {
@@ -41,6 +43,22 @@ export default function CredentialsPage() {
     queryKey: ["selected-repos"],
     queryFn: () => api.getSelectedRepos(),
     enabled: authStatus?.configured,
+  });
+
+  const { data: availableRepos } = useQuery({
+    queryKey: ["available-repos"],
+    queryFn: () => api.listRepos(),
+    enabled: authStatus?.configured,
+  });
+
+  const [selectedRepoFullNames, setSelectedRepoFullNames] = useState<Set<string>>(new Set());
+
+  const selectReposMutation = useMutation({
+    mutationFn: (repoFullNames: string[]) => api.selectRepos(repoFullNames),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["selected-repos"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 
   const patMutation = useMutation({
@@ -67,11 +85,11 @@ export default function CredentialsPage() {
   });
 
   // Initialize members from server
-  useState(() => {
+  useEffect(() => {
     if (teamMembers?.members) {
       setMembers(teamMembers.members.map(m => m.github_login));
     }
-  });
+  }, [teamMembers]);
 
   const handleAddMember = () => {
     if (newMember && !members.includes(newMember)) {
@@ -87,6 +105,27 @@ export default function CredentialsPage() {
     setMembers(updated);
     teamMembersMutation.mutate(updated);
   };
+
+  const handleToggleRepo = (fullName: string) => {
+    const updated = new Set(selectedRepoFullNames);
+    if (updated.has(fullName)) {
+      updated.delete(fullName);
+    } else {
+      updated.add(fullName);
+    }
+    setSelectedRepoFullNames(updated);
+  };
+
+  const handleSaveRepos = () => {
+    selectReposMutation.mutate(Array.from(selectedRepoFullNames));
+  };
+
+  // Update selected repos when data loads (only once or when it becomes available)
+  useEffect(() => {
+    if (selectedRepos?.repos && selectedRepoFullNames.size === 0) {
+      setSelectedRepoFullNames(new Set(selectedRepos.repos.map(r => r.full_name)));
+    }
+  }, [selectedRepos]);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -123,32 +162,102 @@ export default function CredentialsPage() {
                     </div>
                   </div>
 
-                  {selectedRepos && selectedRepos.repos.length > 0 && (
+                  <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-semibold mb-2">Selected Repositories</h4>
-                      <div className="space-y-2">
-                        {selectedRepos.repos.map((repo) => (
-                          <div
-                            key={repo.id}
-                            className="flex items-center justify-between p-3 rounded-lg bg-secondary/50"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Github className="w-4 h-4" />
-                              <span className="font-mono text-sm">{repo.full_name}</span>
-                              {repo.private && (
-                                <Badge variant="secondary" className="text-xs">Private</Badge>
-                              )}
-                            </div>
-                            {repo.last_synced_at && (
-                              <span className="text-xs text-muted-foreground">
-                                Synced {new Date(repo.last_synced_at).toLocaleString()}
-                              </span>
+                      <h4 className="text-sm font-semibold mb-3">Repository Selection</h4>
+                      {availableRepos ? (
+                        <div className="space-y-3">
+                          <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3">
+                            {availableRepos.repos.length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                No repositories found
+                              </p>
+                            ) : (
+                              availableRepos.repos.map((repo) => {
+                                const isSelected = selectedRepoFullNames.has(repo.full_name);
+                                return (
+                                  <label
+                                    key={repo.id}
+                                    className="flex items-center gap-3 p-2 rounded hover:bg-secondary/50 cursor-pointer"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => handleToggleRepo(repo.full_name)}
+                                      className="w-4 h-4 accent-primary"
+                                    />
+                                    <div className="flex-1 flex items-center gap-2">
+                                      <Github className="w-4 h-4" />
+                                      <span className="font-mono text-sm">{repo.full_name}</span>
+                                      {repo.private && (
+                                        <Badge variant="secondary" className="text-xs">Private</Badge>
+                                      )}
+                                    </div>
+                                  </label>
+                                );
+                              })
                             )}
                           </div>
-                        ))}
-                      </div>
+                          <Button
+                            onClick={handleSaveRepos}
+                            disabled={selectReposMutation.isPending}
+                            className="w-full"
+                          >
+                            {selectReposMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                Save Selected Repositories ({selectedRepoFullNames.size})
+                              </>
+                            )}
+                          </Button>
+                          {selectReposMutation.isError && (
+                            <p className="text-sm text-destructive">
+                              Failed to save repository selection
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          Loading repositories...
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    {selectedRepos && selectedRepos.repos.length > 0 ? (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2">Currently Selected</h4>
+                        <div className="space-y-2">
+                          {selectedRepos.repos.map((repo) => (
+                            <div
+                              key={repo.id}
+                              className="flex items-center justify-between p-3 rounded-lg bg-secondary/50"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Github className="w-4 h-4" />
+                                <span className="font-mono text-sm">{repo.full_name}</span>
+                                {repo.private && (
+                                  <Badge variant="secondary" className="text-xs">Private</Badge>
+                                )}
+                              </div>
+                              {repo.last_synced_at && (
+                                <span className="text-xs text-muted-foreground">
+                                  Synced {new Date(repo.last_synced_at).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : selectedRepos && selectedRepos.repos.length === 0 ? (
+                      <div className="text-sm text-muted-foreground text-center py-2">
+                        No repositories selected. Select repositories above to start syncing.
+                      </div>
+                    ) : null}
+                  </div>
 
                   <Button
                     variant="destructive"

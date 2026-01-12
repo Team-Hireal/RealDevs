@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export type AccentColor = "blue" | "green" | "purple" | "red" | "orange" | "cyan" | "pink";
+export type AccentColor = "blue" | "green" | "purple" | "red" | "orange" | "cyan" | "pink" | "white";
 
 interface ThemeContextType {
   accentColor: AccentColor;
@@ -19,6 +19,7 @@ const ACCENT_COLORS: Record<AccentColor, { name: string; hsl: string }> = {
   orange: { name: "Orange", hsl: "25 95% 53%" },
   cyan: { name: "Cyan", hsl: "188 94% 43%" },
   pink: { name: "Pink", hsl: "330 81% 60%" },
+  white: { name: "White", hsl: "0 0% 100%" },
 };
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

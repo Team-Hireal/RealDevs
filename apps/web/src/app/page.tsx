@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { 
   RefreshCw, 
   TrendingUp, 
@@ -16,7 +17,9 @@ import {
   Users,
   ExternalLink,
   Copy,
-  CheckCircle
+  CheckCircle,
+  Calendar,
+  X
 } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
@@ -37,8 +40,10 @@ import {
 } from "recharts";
 
 export default function DashboardPage() {
-  const [rangeDays, setRangeDays] = useState(7);
+  const [rangeDays, setRangeDays] = useState<number | null>(7);
   const [copied, setCopied] = useState(false);
+  const [showCustomDatePopup, setShowCustomDatePopup] = useState(false);
+  const [customDays, setCustomDays] = useState<string>("");
   const queryClient = useQueryClient();
 
   const { data: authStatus } = useQuery({
@@ -48,13 +53,13 @@ export default function DashboardPage() {
 
   const { data: dashboard, isLoading } = useQuery({
     queryKey: ["dashboard", rangeDays],
-    queryFn: () => api.getDashboard(rangeDays),
+    queryFn: () => api.getDashboard(rangeDays ?? 7),
     enabled: authStatus?.configured,
   });
 
   const { data: weeklyReport } = useQuery({
     queryKey: ["weekly-report", rangeDays],
-    queryFn: () => api.getWeeklyReport(rangeDays),
+    queryFn: () => api.getWeeklyReport(rangeDays ?? 7),
     enabled: authStatus?.configured,
   });
 
@@ -127,17 +132,33 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-3">
             {/* Range selector */}
-            <div className="flex gap-2">
-              {[7, 14, 30].map((days) => (
+            <div className="flex gap-2 flex-wrap">
+              {[7, 30, 365].map((days) => (
                 <Button
                   key={days}
                   variant={rangeDays === days ? "default" : "outline"}
                   size="sm"
                   onClick={() => setRangeDays(days)}
                 >
-                  {days}d
+                  {days === 365 ? "1 Year" : `${days}d`}
                 </Button>
               ))}
+              <Button
+                variant={rangeDays === null ? "default" : "outline"}
+                size="sm"
+                onClick={() => setRangeDays(null)}
+              >
+                All Time
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCustomDatePopup(true)}
+                className="flex items-center gap-2"
+              >
+                <Calendar className="w-4 h-4" />
+                Custom
+              </Button>
             </div>
 
             {/* Sync button */}
@@ -177,7 +198,7 @@ export default function DashboardPage() {
                     <TrendingUp className="w-5 h-5 accent-text" />
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Last {rangeDays} days
+                    {rangeDays ? `Last ${rangeDays} days` : "All Time"}
                   </p>
                   <div className="mt-4 h-12">
                     <ResponsiveContainer width="100%" height="100%">
@@ -514,6 +535,80 @@ export default function DashboardPage() {
               </Card>
             )}
           </>
+        )}
+
+        {/* Custom Date Popup */}
+        {showCustomDatePopup && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <Card className="glass-card max-w-md w-full">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Custom Date Range</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setShowCustomDatePopup(false);
+                      setCustomDays("");
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                <CardDescription>
+                  Enter the number of days to filter the dashboard data
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Number of Days
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="e.g., 14, 45, 90"
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    min="1"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const days = parseInt(customDays);
+                        if (days > 0) {
+                          setRangeDays(days);
+                          setShowCustomDatePopup(false);
+                          setCustomDays("");
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowCustomDatePopup(false);
+                      setCustomDays("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const days = parseInt(customDays);
+                      if (days > 0) {
+                        setRangeDays(days);
+                        setShowCustomDatePopup(false);
+                        setCustomDays("");
+                      }
+                    }}
+                    disabled={!customDays || parseInt(customDays) <= 0}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </main>
     </div>

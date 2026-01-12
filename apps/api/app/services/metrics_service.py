@@ -36,10 +36,14 @@ class MetricsService:
         return weights
     
     @staticmethod
-    def get_dashboard_data(range_days: int = 7) -> Dict:
+    def get_dashboard_data(range_days: Optional[int] = 7) -> Dict:
         """Get all dashboard data including metrics and risk flags."""
         until = datetime.now(timezone.utc)
-        since = until - timedelta(days=range_days)
+        # If range_days is None, use a very early date (effectively all time)
+        if range_days is None:
+            since = datetime(2000, 1, 1, tzinfo=timezone.utc)  # GitHub was founded in 2008, but use 2000 to be safe
+        else:
+            since = until - timedelta(days=range_days)
         
         repos = Repository.query.all()
         if not repos:
@@ -82,7 +86,7 @@ class MetricsService:
             "risk_flags": risk_flags,
             "contributors": contributors,
             "last_synced": last_synced.isoformat() if last_synced else None,
-            "range_days": range_days
+            "range_days": range_days if range_days is not None else None
         }
     
     @staticmethod
@@ -330,9 +334,15 @@ class MetricsService:
         return default
     
     @staticmethod
-    def get_weekly_recap(range_days: int = 7) -> str:
+    def get_weekly_recap(range_days: Optional[int] = 7) -> str:
         """Generate weekly recap text."""
         data = MetricsService.get_dashboard_data(range_days)
+        
+        # Adjust label for all-time
+        if range_days is None:
+            range_days_label = "All Time"
+        else:
+            range_days_label = f"{range_days} days"
         
         summary = data["team_summary"]
         repos = data["repo_summaries"]
@@ -341,7 +351,7 @@ class MetricsService:
         
         # Build text
         lines = []
-        lines.append(f"📊 Weekly Recap ({range_days} days)")
+        lines.append(f"📊 Weekly Recap ({range_days_label})")
         lines.append("=" * 50)
         lines.append("")
         

@@ -92,14 +92,27 @@ class SyncService:
         
         repos = Repository.query.all()
         if not repos:
-            return {"ok": False, "error": "No repos selected"}
+            logger.warning("Sync attempted but no repos selected")
+            return {
+                "ok": False, 
+                "error": "No repos selected. Please select repositories first.",
+                "stats": {
+                    "repos_synced": 0,
+                    "total_commits": 0,
+                    "total_prs": 0
+                }
+            }
         
         until = datetime.now(timezone.utc)
         since = until - timedelta(days=range_days)
         
         synced_repos = []
+        failed_repos = []
         total_commits = 0
         total_prs = 0
+        total_issues = 0
+        
+        logger.info(f"Starting sync for {len(repos)} repo(s), range: {range_days} days")
         
         with GitHubClient(pat) as client:
             for repo in repos:
@@ -108,6 +121,7 @@ class SyncService:
                     
                     # Fetch commits
                     commits = client.get_commits(repo.owner, repo.name, since=since, until=until)
+                    logger.info(f"  Fetched {len(commits)} commits from {repo.full_name}")
                     total_commits += len(commits)
                     
                     # Fetch PRs
@@ -115,10 +129,13 @@ class SyncService:
                     # Filter by date
                     prs = [pr for pr in prs if pr.get('updated_at') and 
                            SyncService._parse_github_date(pr['updated_at']) >= since]
+                    logger.info(f"  Fetched {len(prs)} PRs from {repo.full_name}")
                     total_prs += len(prs)
                     
                     # Fetch issues (optional)
                     issues = client.get_issues(repo.owner, repo.name, state="closed", since=since)
+                    logger.info(f"  Fetched {len(issues)} issues from {repo.full_name}")
+                    total_issues += len(issues)
                     
                     # Process data
                     SyncService._process_commits(repo, commits, since, until)
@@ -128,21 +145,32 @@ class SyncService:
                     # Update last synced
                     repo.last_synced_at = datetime.now(timezone.utc)
                     synced_repos.append(repo.full_name)
+                    logger.info(f"  Successfully synced {repo.full_name}")
                 
                 except Exception as e:
-                    logger.error(f"Error syncing {repo.full_name}: {e}")
+                    error_msg = str(e)
+                    logger.error(f"Error syncing {repo.full_name}: {error_msg}", exc_info=True)
+                    failed_repos.append({
+                        "repo": repo.full_name,
+                        "error": error_msg
+                    })
         
         db.session.commit()
         
-        return {
-            "ok": True,
+        result = {
+            "ok": len(failed_repos) == 0,
             "synced_repos": synced_repos,
+            "failed_repos": failed_repos,
             "stats": {
                 "repos_synced": len(synced_repos),
                 "total_commits": total_commits,
-                "total_prs": total_prs
+                "total_prs": total_prs,
+                "total_issues": total_issues
             }
         }
+        
+        logger.info(f"Sync completed: {len(synced_repos)} successful, {len(failed_repos)} failed")
+        return result
     
     @staticmethod
     def _parse_github_date(date_str: str) -> datetime:

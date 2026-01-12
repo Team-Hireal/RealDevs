@@ -21,7 +21,7 @@ export function ThemeSelector() {
         <Palette className="w-4 h-4" />
         <span>Accent Color</span>
       </div>
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {(Object.keys(ACCENT_COLORS) as AccentColor[]).map((color) => {
           const isActive = accentColor === color;
           const colorData = ACCENT_COLORS[color];

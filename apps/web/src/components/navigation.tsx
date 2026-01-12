@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Key, Settings, Github } from "lucide-react";
+import { LayoutDashboard, Key, Settings } from "lucide-react";
 import { ThemeSelector } from "./theme-selector";
 
 const navItems = [
@@ -19,10 +19,16 @@ export function Navigation() {
     <nav className="glass-card w-64 min-h-screen p-6 flex flex-col">
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
-          <Github className="w-8 h-8 accent-text" />
+          <img 
+            src="/logo.png" 
+            alt="Hireal Logo" 
+            width={32} 
+            height={32} 
+            className="w-8 h-8 object-contain"
+          />
           <h1 className="text-2xl font-bold accent-text">RealDevs</h1>
         </div>
-        <p className="text-xs text-muted-foreground">Team Momentum Analytics</p>
+        <p className="text-xs text-muted-foreground">Team Producitivity at a Glance</p>
       </div>
 
       <div className="flex-1 space-y-2">
@@ -50,10 +56,7 @@ export function Navigation() {
 
       <div className="mt-auto pt-6 border-t border-border space-y-6">
         <ThemeSelector />
-        <div className="text-xs text-muted-foreground">
-          <p>Phase 1 MVP</p>
-          <p>Local-first by design</p>
-        </div>
+        
       </div>
     </nav>
   );
