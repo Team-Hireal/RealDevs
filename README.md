@@ -190,5 +190,5 @@ MIT License - see [LICENSE](./LICENSE)
 
 ---
 
-Built with ❤️ for engineering teams who value trust over surveillance.
+Built with ❤️ for engineering teams who value trust over surveillance. 1
 
