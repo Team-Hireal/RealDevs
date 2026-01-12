@@ -14,9 +14,23 @@ class Config:
     
     # Database
     BASE_DIR = Path(__file__).parent
-    DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/realdevs.db")
-    SQLALCHEMY_DATABASE_URI = DATABASE_URL.replace("sqlite:///", "sqlite:///")
+    # Support both SQLite (local) and PostgreSQL (production)
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    
+    if not DATABASE_URL:
+        # Fallback to SQLite for local development
+        DATABASE_URL = f"sqlite:///{BASE_DIR}/realdevs.db"
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    else:
+        # PostgreSQL connection string (or other database)
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Connection pooling for serverless (PostgreSQL)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,  # Verify connections before using
+        "pool_recycle": 300,    # Recycle connections after 5 minutes
+    }
     
     # CORS
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003").split(",")
