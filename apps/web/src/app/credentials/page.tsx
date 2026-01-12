@@ -55,7 +55,9 @@ export default function CredentialsPage() {
 
   const selectReposMutation = useMutation({
     mutationFn: (repoFullNames: string[]) => api.selectRepos(repoFullNames),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      // Update local state to match what was saved
+      setSelectedRepoFullNames(new Set(variables));
       queryClient.invalidateQueries({ queryKey: ["selected-repos"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
@@ -120,7 +122,7 @@ export default function CredentialsPage() {
     selectReposMutation.mutate(Array.from(selectedRepoFullNames));
   };
 
-  // Update selected repos when data loads (only once or when it becomes available)
+  // Update selected repos when data loads from server (initial load only)
   useEffect(() => {
     if (selectedRepos?.repos && selectedRepoFullNames.size === 0) {
       setSelectedRepoFullNames(new Set(selectedRepos.repos.map(r => r.full_name)));

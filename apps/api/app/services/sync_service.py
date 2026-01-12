@@ -38,7 +38,7 @@ class SyncService:
     
     @staticmethod
     def select_repos(repo_full_names: List[str]) -> Dict:
-        """Mark repos as selected for syncing."""
+        """Mark repos as selected for syncing. Removes repos not in the list."""
         pat = AuthService.get_stored_pat()
         if not pat:
             raise ValueError("No PAT stored")
@@ -49,6 +49,27 @@ class SyncService:
         # Create a lookup
         repo_map = {repo['full_name']: repo for repo in all_repos}
         
+        # Get currently selected repos
+        current_repos = Repository.query.all()
+        current_full_names = {r.full_name for r in current_repos}
+        
+        # Convert new selection to a set for easier comparison
+        new_full_names = set(repo_full_names)
+        
+        # Find repos to remove (in DB but not in new selection)
+        repos_to_remove = current_full_names - new_full_names
+        if repos_to_remove:
+            repos_to_delete = Repository.query.filter(
+                Repository.full_name.in_(repos_to_remove)
+            ).all()
+            for repo in repos_to_delete:
+                db.session.delete(repo)
+            logger.info(f"Removing {len(repos_to_delete)} repo(s) from selection")
+        
+        # Find repos to add (in new selection but not in DB)
+        repos_to_add = new_full_names - current_full_names
+        
+        # Process repos to add
         selected = []
         for full_name in repo_full_names:
             if full_name not in repo_map:
@@ -77,10 +98,13 @@ class SyncService:
         
         db.session.commit()
         
+        # Get final list of selected repos
+        final_selected = Repository.query.all()
+        
         return {
             "ok": True,
-            "selected_count": len(selected),
-            "repos": [{"id": r.id, "full_name": r.full_name} for r in selected]
+            "selected_count": len(final_selected),
+            "repos": [{"id": r.id, "full_name": r.full_name} for r in final_selected]
         }
     
     @staticmethod
