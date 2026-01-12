@@ -244,7 +244,6 @@ export default function SettingsPage() {
               <Button
                 onClick={handleSave}
                 disabled={!hasChanges || updateMutation.isPending}
-                className="glow-sm"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
@@ -263,7 +262,7 @@ export default function SettingsPage() {
               <ThemeSelectorCard className="mb-8" />
               
               {/* Risk Flag Thresholds */}
-              <Card className="glass-card glow mb-8">
+              <Card className="glass-card mb-8">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5" />
@@ -279,7 +278,7 @@ export default function SettingsPage() {
               </Card>
 
               {/* Momentum Score Weights */}
-              <Card className="glass-card glow">
+              <Card className="glass-card">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5" />

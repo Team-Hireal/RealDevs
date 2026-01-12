@@ -224,7 +224,7 @@ export default function CredentialsPage() {
           </p>
 
           {/* GitHub PAT Configuration */}
-          <Card className="glass-card glow mb-8">
+          <Card className="glass-card mb-8">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Key className="w-5 h-5" />
@@ -429,7 +429,7 @@ export default function CredentialsPage() {
 
           {/* Internal/External Organizations */}
           {authStatus?.configured && (
-            <Card className="glass-card glow mb-8">
+            <Card className="glass-card mb-8">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Building2 className="w-5 h-5" />
@@ -583,7 +583,7 @@ export default function CredentialsPage() {
           )}
 
           {/* Team Members Management */}
-          <Card className="glass-card glow">
+          <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />

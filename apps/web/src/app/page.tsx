@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
+import { useTheme } from "@/contexts/theme-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,13 +24,14 @@ import {
   Loader2,
   BarChart3
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from "recharts";
 
 export default function DashboardPage() {
   const [rangeDays, setRangeDays] = useState<number | null>(7);
   const [copied, setCopied] = useState(false);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { accentColor } = useTheme();
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ["dashboard", rangeDays],
@@ -133,6 +135,29 @@ export default function DashboardPage() {
     );
   }, [dashboardData?.risk_flags, selectedContributor]);
 
+  // Get accent color HSL value for gradients
+  const getAccentColorHsl = () => {
+    const accentColors: Record<string, string> = {
+      gold: "45 65% 52%",
+      "metallic-pink": "335 45% 58%",
+      bronze: "28 55% 42%",
+      copper: "18 65% 48%",
+      platinum: "200 12% 80%",
+      steel: "210 20% 55%",
+      "rose-gold": "15 45% 60%",
+      titanium: "195 18% 65%",
+    };
+    return accentColors[accentColor] || accentColors.gold;
+  };
+
+  // Prepare pie chart data for contribution split
+  const pieChartData = useMemo(() => {
+    return [
+      { name: "Internal", value: displayMetrics.internalPercentage },
+      { name: "External", value: displayMetrics.externalPercentage },
+    ];
+  }, [displayMetrics.internalPercentage, displayMetrics.externalPercentage]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen bg-background">
@@ -175,7 +200,6 @@ export default function DashboardPage() {
                   variant={rangeDays === 7 ? "default" : "ghost"}
                   size="sm"
                   onClick={() => setRangeDays(7)}
-                  className="glow-sm"
                 >
                   7d
                 </Button>
@@ -206,7 +230,6 @@ export default function DashboardPage() {
               <Button
                 onClick={() => syncMutation.mutate()}
                 disabled={syncMutation.isPending}
-                className="glow-sm"
               >
                 {syncMutation.isPending ? (
                   <>
@@ -233,17 +256,56 @@ export default function DashboardPage() {
           {/* 4 Key Metric Cards */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
             {/* Total Code Commitment Trend */}
-            <Card className="glass-card glow">
+            <Card className="glass-card flex flex-col h-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {selectedContributor ? `${selectedContributor}'s Commits` : "Total Code Commitment"}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1 flex flex-col">
                 <div className="text-3xl font-bold accent-text mb-1">
                   {displayMetrics.totalCommits}
                 </div>
-                <p className="text-xs text-muted-foreground">Commits</p>
+                <p className="text-xs text-muted-foreground mb-3">Commits</p>
+                {dailyCommitsData?.daily_commits && dailyCommitsData.daily_commits.length > 0 ? (
+                  <div className="flex-1 min-h-[120px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={dailyCommitsData.daily_commits}>
+                        <defs>
+                          <linearGradient id="commitGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={`hsl(${getAccentColorHsl()} / 0.8)`} />
+                            <stop offset="100%" stopColor={`hsl(${getAccentColorHsl()} / 0.1)`} />
+                          </linearGradient>
+                        </defs>
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            padding: '4px 8px'
+                          }}
+                          labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '10px' }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="commits" 
+                          fill="url(#commitGradient)"
+                          stroke={`hsl(${getAccentColorHsl()})`}
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 4, fill: `hsl(${getAccentColorHsl()})` }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-[120px] flex items-center justify-center">
+                    <div className="text-center">
+                      <TrendingUp className="w-6 h-6 mx-auto mb-1 opacity-50 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">No trend data</p>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-3 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-green-500" />
                   <span className="text-xs text-muted-foreground">
@@ -254,13 +316,62 @@ export default function DashboardPage() {
             </Card>
 
             {/* Internal vs External Split */}
-            <Card className="glass-card glow">
+            <Card className="glass-card flex flex-col h-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {selectedContributor ? "Contributor Type" : "Contribution Split"}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1 flex flex-col">
+                <div className="flex-1 min-h-[120px] flex items-center justify-center mb-3">
+                  {pieChartData.some(d => d.value > 0) ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <defs>
+                          <linearGradient id="internalGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={`hsl(${getAccentColorHsl()} / 0.9)`} />
+                            <stop offset="100%" stopColor={`hsl(${getAccentColorHsl()} / 0.5)`} />
+                          </linearGradient>
+                          <linearGradient id="externalGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={`hsl(${getAccentColorHsl()} / 0.4)`} />
+                            <stop offset="100%" stopColor={`hsl(${getAccentColorHsl()} / 0.1)`} />
+                          </linearGradient>
+                        </defs>
+                        <Pie
+                          data={pieChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={30}
+                          outerRadius={50}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {pieChartData.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={index === 0 ? "url(#internalGradient)" : "url(#externalGradient)"}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            padding: '4px 8px'
+                          }}
+                          labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '10px' }}
+                          formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center">
+                      <Users className="w-6 h-6 mx-auto mb-1 opacity-50 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">No data</p>
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Internal</span>
@@ -274,24 +385,18 @@ export default function DashboardPage() {
                       {displayMetrics.externalPercentage.toFixed(0)}%
                     </span>
                   </div>
-                  <div className="h-2 bg-secondary rounded-full overflow-hidden mt-2">
-                    <div 
-                      className="h-full accent-bg transition-all"
-                      style={{ width: `${displayMetrics.internalPercentage}%` }}
-                    />
-                  </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Top Contributor / Selected Contributor */}
-            <Card className="glass-card glow">
+            <Card className="glass-card flex flex-col h-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {selectedContributor ? "Selected Contributor" : "Top Contributor"}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1">
                 {(selectedContributorData || topContributor) ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -325,13 +430,13 @@ export default function DashboardPage() {
             </Card>
 
             {/* Risk Flags Counter */}
-            <Card className="glass-card glow">
+            <Card className="glass-card flex flex-col h-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {selectedContributor ? `${selectedContributor}'s Risk Flags` : "Risk Flags"}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1">
                 <div className="text-3xl font-bold accent-text mb-1">
                   {displayRiskFlags.length}
                 </div>
@@ -365,7 +470,7 @@ export default function DashboardPage() {
           {/* Charts Section */}
           <div className="grid gap-6 lg:grid-cols-2 mb-8">
             {/* Daily Commits Bar Chart */}
-            <Card className="glass-card glow">
+            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
@@ -424,7 +529,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Contribution Split Bar Chart */}
-            <Card className="glass-card glow">
+            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
@@ -480,7 +585,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Contributors Section */}
-          <Card className="glass-card glow mb-8">
+          <Card className="glass-card mb-8">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -676,7 +781,7 @@ export default function DashboardPage() {
 
           <div className="grid gap-6 lg:grid-cols-2 mb-8">
             {/* Risk Flags Section */}
-            <Card className="glass-card glow">
+            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5" />
@@ -736,7 +841,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Weekly Recap */}
-            <Card className="glass-card glow">
+            <Card className="glass-card">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>

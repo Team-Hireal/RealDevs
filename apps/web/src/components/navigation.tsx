@@ -43,7 +43,7 @@ export function Navigation() {
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
                 isActive
-                  ? "bg-primary text-primary-foreground glow-sm"
+                  ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}
             >

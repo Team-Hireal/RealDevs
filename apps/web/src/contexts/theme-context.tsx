@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type AccentColor = "gold" | "metallic-pink" | "bronze" | "copper" | "platinum" | "steel" | "rose-gold" | "titanium";
 
-export type BackgroundPattern = "dots" | "grid" | "waves" | "circuit" | "hexagon" | "lines" | "radial" | "mesh";
+export type BackgroundPattern = "flowing" | "organic";
 
 interface ThemeContextType {
   accentColor: AccentColor;
@@ -27,19 +27,13 @@ const ACCENT_COLORS: Record<AccentColor, { name: string; hsl: string }> = {
 };
 
 const BACKGROUND_PATTERNS: Record<BackgroundPattern, { name: string; class: string }> = {
-  dots: { name: "Dots", class: "bg-pattern-dots" },
-  grid: { name: "Grid", class: "bg-pattern-grid" },
-  waves: { name: "Waves", class: "bg-pattern-waves" },
-  circuit: { name: "Circuit", class: "bg-pattern-circuit" },
-  hexagon: { name: "Hexagon", class: "bg-pattern-hexagon" },
-  lines: { name: "Lines", class: "bg-pattern-lines" },
-  radial: { name: "Radial", class: "bg-pattern-radial" },
-  mesh: { name: "Mesh", class: "bg-pattern-mesh" },
+  "flowing": { name: "Flowing", class: "bg-pattern-flowing" },
+  "organic": { name: "Organic", class: "bg-pattern-organic" },
 };
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [accentColor, setAccentColorState] = useState<AccentColor>("gold");
-  const [backgroundPattern, setBackgroundPatternState] = useState<BackgroundPattern>("dots");
+  const [backgroundPattern, setBackgroundPatternState] = useState<BackgroundPattern>("flowing");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -48,7 +42,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setAccentColorState(initialColor);
     
     const savedPattern = localStorage.getItem("background-pattern") as BackgroundPattern;
-    const initialPattern = (savedPattern && BACKGROUND_PATTERNS[savedPattern]) ? savedPattern : "dots";
+    const initialPattern = (savedPattern && BACKGROUND_PATTERNS[savedPattern]) ? savedPattern : "flowing";
     setBackgroundPatternState(initialPattern);
     
     // Set initial CSS variable immediately

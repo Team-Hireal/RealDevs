@@ -62,13 +62,6 @@
     color: hsl(var(--accent));
   }
   
-  .glow {
-    box-shadow: 0 0 20px hsl(var(--accent) / 0.3);
-  }
-  
-  .glow-sm {
-    box-shadow: 0 0 10px hsl(var(--accent) / 0.2);
-  }
   
   .accent-border {
     border-color: hsl(var(--accent) / 0.3);
@@ -98,81 +91,27 @@
   background: hsl(var(--muted-foreground));
 }
 
-/* Background Patterns */
-.bg-pattern-dots {
+/* Background Patterns - Seamless, non-repeating */
+.bg-pattern-flowing {
   background-image: 
-    radial-gradient(circle, hsl(var(--accent) / 0.15) 1px, transparent 1px);
-  background-size: 24px 24px;
+    radial-gradient(ellipse 80% 60% at 20% 30%, hsl(var(--accent) / 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 80% at 80% 70%, hsl(var(--accent) / 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 50% at 50% 50%, hsl(var(--accent) / 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 70% at 10% 80%, hsl(var(--accent) / 0.1) 0%, transparent 50%);
+  background-size: 100% 100%;
   background-position: 0 0;
+  background-attachment: fixed;
 }
 
-.bg-pattern-grid {
+.bg-pattern-organic {
   background-image: 
-    linear-gradient(hsl(var(--accent) / 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--accent) / 0.1) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-.bg-pattern-waves {
-  background-image: 
-    repeating-linear-gradient(
-      45deg,
-      transparent,
-      transparent 10px,
-      hsl(var(--accent) / 0.08) 10px,
-      hsl(var(--accent) / 0.08) 20px
-    );
-}
-
-.bg-pattern-circuit {
-  background-image: 
-    linear-gradient(hsl(var(--accent) / 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--accent) / 0.1) 1px, transparent 1px);
-  background-size: 40px 40px;
-  background-position: 0 0, 20px 20px;
-}
-
-.bg-pattern-hexagon {
-  background-image: 
-    repeating-linear-gradient(
-      60deg,
-      transparent,
-      transparent 20px,
-      hsl(var(--accent) / 0.08) 20px,
-      hsl(var(--accent) / 0.08) 21px
-    ),
-    repeating-linear-gradient(
-      120deg,
-      transparent,
-      transparent 20px,
-      hsl(var(--accent) / 0.08) 20px,
-      hsl(var(--accent) / 0.08) 21px
-    );
-}
-
-.bg-pattern-lines {
-  background-image: 
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      hsl(var(--accent) / 0.1) 2px,
-      hsl(var(--accent) / 0.1) 4px
-    );
-}
-
-.bg-pattern-radial {
-  background-image: 
-    radial-gradient(circle at 50% 50%, hsl(var(--accent) / 0.12) 0%, transparent 50%);
-  background-size: 60px 60px;
+    radial-gradient(circle at 15% 25%, hsl(var(--accent) / 0.18) 0%, transparent 35%),
+    radial-gradient(circle at 85% 75%, hsl(var(--accent) / 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 10%, hsl(var(--accent) / 0.12) 0%, transparent 30%),
+    radial-gradient(circle at 30% 90%, hsl(var(--accent) / 0.14) 0%, transparent 35%),
+    radial-gradient(circle at 70% 50%, hsl(var(--accent) / 0.1) 0%, transparent 45%);
+  background-size: 100% 100%;
   background-position: 0 0;
-}
-
-.bg-pattern-mesh {
-  background-image: 
-    linear-gradient(hsl(var(--accent) / 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--accent) / 0.08) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: 0 0, 12px 12px;
+  background-attachment: fixed;
 }
 
