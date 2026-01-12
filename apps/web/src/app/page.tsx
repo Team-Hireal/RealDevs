@@ -1,107 +1,59 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { 
-  RefreshCw, 
+  LayoutDashboard, 
   TrendingUp, 
-  GitPullRequest, 
+  Users, 
+  AlertTriangle, 
   GitCommit, 
-  AlertTriangle,
-  Users,
-  ExternalLink,
+  GitPullRequest,
+  CheckCircle2,
+  RefreshCw,
   Copy,
-  CheckCircle,
   Calendar,
-  X
+  ExternalLink,
+  Loader2,
+  BarChart3
 } from "lucide-react";
-import { useState } from "react";
-import Link from "next/link";
-import { formatRelativeTime, formatNumber } from "@/lib/utils";
-import { 
-  LineChart, 
-  Line, 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export default function DashboardPage() {
   const [rangeDays, setRangeDays] = useState<number | null>(7);
   const [copied, setCopied] = useState(false);
-  const [showCustomDatePopup, setShowCustomDatePopup] = useState(false);
-  const [customDays, setCustomDays] = useState<string>("");
   const queryClient = useQueryClient();
 
-  const { data: authStatus } = useQuery({
-    queryKey: ["auth-status"],
-    queryFn: () => api.getAuthStatus(),
-  });
-
-  const { data: dashboard, isLoading } = useQuery({
+  const { data: dashboardData, isLoading } = useQuery({
     queryKey: ["dashboard", rangeDays],
-    queryFn: () => api.getDashboard(rangeDays ?? 7),
-    enabled: authStatus?.configured,
+    queryFn: () => api.getDashboard(rangeDays),
+    enabled: true,
   });
 
   const { data: weeklyReport } = useQuery({
     queryKey: ["weekly-report", rangeDays],
-    queryFn: () => api.getWeeklyReport(rangeDays ?? 7),
-    enabled: authStatus?.configured,
+    queryFn: () => api.getWeeklyReport(rangeDays),
+    enabled: !!dashboardData,
+  });
+
+  const { data: dailyCommitsData } = useQuery({
+    queryKey: ["daily-commits", rangeDays],
+    queryFn: () => api.getDailyCommits(rangeDays),
+    enabled: !!dashboardData,
   });
 
   const syncMutation = useMutation({
     mutationFn: () => api.syncRepos(rangeDays),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-report"] });
     },
   });
-
-  if (!authStatus?.configured) {
-    return (
-      <div className="flex min-h-screen bg-background">
-        <Navigation />
-        <main className="flex-1 p-8">
-          <Card className="glass-card max-w-2xl mx-auto mt-20">
-            <CardHeader>
-              <CardTitle>Welcome to RealDevs</CardTitle>
-              <CardDescription>
-                Configure your GitHub Personal Access Token to get started
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href="/credentials">
-                <Button className="w-full">Configure Credentials</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
-
-  const summary = dashboard?.team_summary;
-  const contributors = dashboard?.contributors?.filter(c => c.is_internal) || [];
-  const topContributor = contributors[0];
-
-  // Prepare chart data - use accent color and a muted version
-  const commitmentData = [
-    { name: "Internal", value: summary?.internal_commits || 0, color: "hsl(var(--accent))" },
-    { name: "External", value: summary?.external_commits || 0, color: "hsl(var(--muted-foreground))" },
-  ];
 
   const handleCopyReport = async () => {
     if (weeklyReport?.text) {
@@ -111,507 +63,522 @@ export default function DashboardPage() {
     }
   };
 
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case "high":
+        return "destructive";
+      case "medium":
+        return "default";
+      case "low":
+        return "secondary";
+      default:
+        return "secondary";
+    }
+  };
+
+  const formatMomentumScore = (score: number) => {
+    return score.toFixed(1);
+  };
+
+  const topContributor = dashboardData?.contributors
+    ?.sort((a, b) => b.momentum_score - a.momentum_score)[0];
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Navigation />
+        <main className="flex-1 p-8 overflow-auto">
+          <div className="max-w-7xl mx-auto">
+            <div className="space-y-6">
+              <div className="h-12 bg-secondary/30 rounded-lg animate-pulse" />
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-40 bg-secondary/30 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-background">
       <Navigation />
       
       <main className="flex-1 p-8 overflow-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold accent-text mb-2">Dashboard</h1>
-            <p className="text-muted-foreground">
-              Team momentum and activity insights
-              {dashboard?.last_synced && (
-                <span className="ml-2">
-                  • Last synced {formatRelativeTime(dashboard.last_synced)}
-                </span>
-              )}
-            </p>
-          </div>
+        <div className="max-w-7xl mx-auto">
+          {/* Header with Controls */}
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-4xl font-bold accent-text mb-2">Dashboard</h1>
+              <p className="text-muted-foreground">
+                Team momentum and productivity overview
+              </p>
+            </div>
 
-          <div className="flex items-center gap-3">
-            {/* Range selector */}
-            <div className="flex gap-2 flex-wrap">
-              {[7, 30, 365].map((days) => (
+            <div className="flex items-center gap-4">
+              {/* Date Range Selector */}
+              <div className="flex items-center gap-2 bg-secondary/30 rounded-lg p-1">
                 <Button
-                  key={days}
-                  variant={rangeDays === days ? "default" : "outline"}
+                  variant={rangeDays === 7 ? "default" : "ghost"}
                   size="sm"
-                  onClick={() => setRangeDays(days)}
+                  onClick={() => setRangeDays(7)}
+                  className="glow-sm"
                 >
-                  {days === 365 ? "1 Year" : `${days}d`}
+                  7d
                 </Button>
-              ))}
+                <Button
+                  variant={rangeDays === 14 ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setRangeDays(14)}
+                >
+                  14d
+                </Button>
+                <Button
+                  variant={rangeDays === 30 ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setRangeDays(30)}
+                >
+                  30d
+                </Button>
+                <Button
+                  variant={rangeDays === null ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setRangeDays(null)}
+                >
+                  All
+                </Button>
+              </div>
+
+              {/* Sync Button */}
               <Button
-                variant={rangeDays === null ? "default" : "outline"}
-                size="sm"
-                onClick={() => setRangeDays(null)}
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                className="glow-sm"
               >
-                All Time
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCustomDatePopup(true)}
-                className="flex items-center gap-2"
-              >
-                <Calendar className="w-4 h-4" />
-                Custom
+                {syncMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Sync
+                  </>
+                )}
               </Button>
             </div>
-
-            {/* Sync button */}
-            <Button
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              className="glow-sm"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-              Sync
-            </Button>
           </div>
-        </div>
 
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-40" />
-            ))}
-          </div>
-        ) : (
-          <>
-            {/* Top 4 Dashboard Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {/* Card 1: Total Code Commitment Trend */}
-              <Card className="glass-card glow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Total Commits
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-2">
-                    <div className="text-3xl font-bold accent-text">
-                      {formatNumber(summary?.total_commits || 0)}
-                    </div>
-                    <TrendingUp className="w-5 h-5 accent-text" />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {rangeDays ? `Last ${rangeDays} days` : "All Time"}
-                  </p>
-                  <div className="mt-4 h-12">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={[
-                        { day: 1, commits: Math.floor((summary?.total_commits || 0) * 0.6) },
-                        { day: 2, commits: Math.floor((summary?.total_commits || 0) * 0.7) },
-                        { day: 3, commits: Math.floor((summary?.total_commits || 0) * 0.8) },
-                        { day: 4, commits: summary?.total_commits || 0 },
-                      ]}>
-                        <Area 
-                          type="monotone" 
-                          dataKey="commits" 
-                          stroke="hsl(var(--accent))" 
-                          fill="hsl(var(--accent) / 0.3)" 
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+          {dashboardData?.last_synced && (
+            <div className="mb-6 text-sm text-muted-foreground flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              Last synced: {new Date(dashboardData.last_synced).toLocaleString()}
+            </div>
+          )}
 
-              {/* Card 2: Internal vs External */}
-              <Card className="glass-card glow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Commitment Split
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+          {/* 4 Key Metric Cards */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+            {/* Total Code Commitment Trend */}
+            <Card className="glass-card glow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Total Code Commitment
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold accent-text mb-1">
+                  {dashboardData?.team_summary.total_commits || 0}
+                </div>
+                <p className="text-xs text-muted-foreground">Commits</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-green-500" />
+                  <span className="text-xs text-muted-foreground">
+                    Momentum: {formatMomentumScore(dashboardData?.team_summary.momentum_score || 0)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Internal vs External Split */}
+            <Card className="glass-card glow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Contribution Split
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="text-2xl font-bold accent-text">
-                        {summary?.internal_percentage?.toFixed(0) || 0}%
-                      </div>
-                      <p className="text-xs text-muted-foreground">Internal</p>
-                    </div>
-                    <div className="h-20 w-20">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={commitmentData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={20}
-                            outerRadius={35}
-                            paddingAngle={2}
-                            dataKey="value"
-                          >
-                            {commitmentData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
+                    <span className="text-sm">Internal</span>
+                    <span className="text-lg font-bold accent-text">
+                      {dashboardData?.team_summary.internal_percentage.toFixed(0) || 0}%
+                    </span>
                   </div>
-                  <div className="mt-2 space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Internal</span>
-                      <span className="font-medium">{summary?.internal_commits || 0}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">External</span>
-                      <span className="font-medium">{summary?.external_commits || 0}</span>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">External</span>
+                    <span className="text-lg font-bold">
+                      {dashboardData?.team_summary.external_percentage.toFixed(0) || 0}%
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="h-2 bg-secondary rounded-full overflow-hidden mt-2">
+                    <div 
+                      className="h-full accent-bg transition-all"
+                      style={{ width: `${dashboardData?.team_summary.internal_percentage || 0}%` }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* Card 3: Top Committer */}
-              <Card className="glass-card glow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Top Contributor
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {topContributor ? (
-                    <>
-                      <div className="flex items-center gap-3 mb-3">
-                        {topContributor.avatar_url ? (
-                          <img 
-                            src={topContributor.avatar_url} 
-                            alt={topContributor.login}
-                            className="w-12 h-12 rounded-full border-2 border-primary"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-lg font-bold">
-                            {topContributor.login[0].toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-semibold">{topContributor.login}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Score: {topContributor.momentum_score}
-                          </div>
+            {/* Top Contributor */}
+            <Card className="glass-card glow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Top Contributor
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {topContributor ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      {topContributor.avatar_url ? (
+                        <img 
+                          src={topContributor.avatar_url} 
+                          alt={topContributor.login}
+                          className="w-8 h-8 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                          <Users className="w-4 h-4" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold truncate">{topContributor.login}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {topContributor.is_internal ? "Internal" : "External"}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <div className="text-muted-foreground">Commits</div>
-                          <div className="font-semibold">{topContributor.commits}</div>
-                        </div>
-                        <div>
-                          <div className="text-muted-foreground">PRs</div>
-                          <div className="font-semibold">{topContributor.prs_merged}</div>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      No data available
                     </div>
+                    <div className="text-lg font-bold accent-text">
+                      {formatMomentumScore(topContributor.momentum_score)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Momentum Score</p>
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground text-sm">No contributors yet</div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Risk Flags Counter */}
+            <Card className="glass-card glow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Risk Flags
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold accent-text mb-1">
+                  {dashboardData?.risk_flags.length || 0}
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">Active alerts</p>
+                <div className="flex gap-1">
+                  {dashboardData?.risk_flags && dashboardData.risk_flags.filter(f => f.severity === "high").length > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {dashboardData.risk_flags.filter(f => f.severity === "high").length} High
+                    </Badge>
                   )}
-                </CardContent>
-              </Card>
+                  {dashboardData?.risk_flags && dashboardData.risk_flags.filter(f => f.severity === "medium").length > 0 && (
+                    <Badge variant="default" className="text-xs">
+                      {dashboardData.risk_flags.filter(f => f.severity === "medium").length} Med
+                    </Badge>
+                  )}
+                  {dashboardData?.risk_flags && dashboardData.risk_flags.filter(f => f.severity === "low").length > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {dashboardData.risk_flags.filter(f => f.severity === "low").length} Low
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-              {/* Card 4: Red Flags */}
-              <Card className="glass-card glow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Risk Flags
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <div className="text-3xl font-bold">
-                      {dashboard?.risk_flags?.length || 0}
-                    </div>
-                    {(dashboard?.risk_flags?.length || 0) > 0 ? (
-                      <AlertTriangle className="w-5 h-5 accent-text" />
-                    ) : (
-                      <CheckCircle className="w-5 h-5 accent-text" />
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    {dashboard?.risk_flags?.slice(0, 2).map((flag, i) => (
-                      <Badge
-                        key={i}
-                        variant={
-                          flag.severity === "high"
-                            ? "destructive"
-                            : flag.severity === "medium"
-                            ? "warning"
-                            : "secondary"
-                        }
-                        className="text-xs"
-                      >
-                        {flag.type.replace(/_/g, " ")}
-                      </Badge>
-                    )) || (
-                      <p className="text-xs text-muted-foreground">
-                        All systems healthy ✓
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Risk Flags Section */}
-            {dashboard?.risk_flags && dashboard.risk_flags.length > 0 && (
-              <Card className="glass-card mb-8">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 accent-text" />
-                    Risk Flags & Alerts
-                  </CardTitle>
-                  <CardDescription>
-                    Potential issues identified in your team's workflow
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {dashboard.risk_flags.map((flag, i) => (
-                      <div
-                        key={i}
-                        className="p-4 rounded-lg border border-border bg-card/50"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge
-                                variant={
-                                  flag.severity === "high"
-                                    ? "destructive"
-                                    : flag.severity === "medium"
-                                    ? "warning"
-                                    : "secondary"
-                                }
-                              >
-                                {flag.severity.toUpperCase()}
-                              </Badge>
-                              <h4 className="font-semibold">{flag.title}</h4>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {flag.description}
-                            </p>
-                            {flag.repo && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Repository: {flag.repo}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Contributors Table */}
-            <Card className="glass-card mb-8">
+          {/* Charts Section */}
+          <div className="grid gap-6 lg:grid-cols-2 mb-8">
+            {/* Daily Commits Bar Chart */}
+            <Card className="glass-card glow">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Team Contributors
+                  <BarChart3 className="w-5 h-5" />
+                  Daily Commits
                 </CardTitle>
                 <CardDescription>
-                  Individual contribution breakdown for internal team members
+                  Commit activity over time
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {contributors.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                            Contributor
-                          </th>
-                          <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                            Commits
-                          </th>
-                          <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                            PRs Opened
-                          </th>
-                          <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                            PRs Merged
-                          </th>
-                          <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                            Issues
-                          </th>
-                          <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                            Score
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {contributors.map((contributor, i) => (
-                          <tr key={i} className="border-b border-border/50 hover:bg-secondary/50">
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-2">
-                                {contributor.avatar_url ? (
-                                  <img
-                                    src={contributor.avatar_url}
-                                    alt={contributor.login}
-                                    className="w-8 h-8 rounded-full"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold">
-                                    {contributor.login[0].toUpperCase()}
-                                  </div>
-                                )}
-                                <div>
-                                  <div className="font-medium">{contributor.login}</div>
-                                  {contributor.name && (
-                                    <div className="text-xs text-muted-foreground">
-                                      {contributor.name}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="text-right py-3 px-4 font-semibold">
-                              {contributor.commits}
-                            </td>
-                            <td className="text-right py-3 px-4 font-semibold">
-                              {contributor.prs_opened}
-                            </td>
-                            <td className="text-right py-3 px-4 font-semibold">
-                              {contributor.prs_merged}
-                            </td>
-                            <td className="text-right py-3 px-4 font-semibold">
-                              {contributor.issues_closed}
-                            </td>
-                            <td className="text-right py-3 px-4">
-                              <Badge variant="secondary">{contributor.momentum_score}</Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {dailyCommitsData?.daily_commits && dailyCommitsData.daily_commits.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={dailyCommitsData.daily_commits}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis 
+                        dataKey="date" 
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis 
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      />
+                      <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
+                      <Bar dataKey="commits" fill="hsl(var(--primary))" name="Commits" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No commit data available</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Contribution Split Bar Chart */}
+            <Card className="glass-card glow">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  Contribution Split
+                </CardTitle>
+                <CardDescription>
+                  Internal vs External contributions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {dailyCommitsData?.internal_external_split && dailyCommitsData.internal_external_split.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={dailyCommitsData.internal_external_split}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis 
+                        dataKey="category" 
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                      />
+                      <YAxis 
+                        stroke="hsl(var(--muted-foreground))"
+                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      />
+                      <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" name="Commits" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No contribution data available</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top Contributors Ranking */}
+          <Card className="glass-card glow mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Top Contributors Ranking
+              </CardTitle>
+              <CardDescription>
+                Top 10 contributors sorted by momentum score
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {dashboardData?.contributors && dashboardData.contributors.length > 0 ? (
+                <div className="space-y-3">
+                  {dashboardData.contributors
+                    .slice(0, 10)
+                    .map((contributor, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-4 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                      >
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold">
+                          {index + 1}
+                        </div>
+                        {contributor.avatar_url ? (
+                          <img 
+                            src={contributor.avatar_url} 
+                            alt={contributor.login}
+                            className="w-10 h-10 rounded-full"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                            <Users className="w-5 h-5" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold">{contributor.login}</div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{contributor.commits} commits</span>
+                            <span>•</span>
+                            <span>{contributor.prs_merged} PRs</span>
+                          </div>
+                        </div>
+                        <Badge variant={contributor.is_internal ? "default" : "secondary"}>
+                          {contributor.is_internal ? "Internal" : "External"}
+                        </Badge>
+                        <div className="text-right">
+                          <div className="font-bold accent-text text-lg">
+                            {formatMomentumScore(contributor.momentum_score)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">momentum</div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No contributors data available</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2 mb-8">
+            {/* Risk Flags Section */}
+            <Card className="glass-card glow">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  Risk Flags
+                </CardTitle>
+                <CardDescription>
+                  Active alerts and warnings for your team
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {dashboardData?.risk_flags && dashboardData.risk_flags.length > 0 ? (
+                  <div className="space-y-3">
+                    {dashboardData.risk_flags.map((flag, index) => (
+                      <div
+                        key={index}
+                        className="p-3 rounded-lg border border-border bg-secondary/30"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={getSeverityColor(flag.severity)}>
+                              {flag.severity}
+                            </Badge>
+                            <span className="font-semibold text-sm">{flag.title}</span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-1">
+                          {flag.description}
+                        </p>
+                        {flag.repo && (
+                          <div className="text-xs text-muted-foreground">
+                            Repo: <span className="font-mono">{flag.repo}</span>
+                          </div>
+                        )}
+                        {flag.contributor && (
+                          <div className="text-xs text-muted-foreground">
+                            Contributor: <span className="font-mono">{flag.contributor}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No team members configured. Add them in{" "}
-                    <Link href="/credentials" className="text-primary hover:underline">
-                      Credentials
-                    </Link>
-                  </p>
+                  <div className="text-center py-8 text-muted-foreground">
+                    <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No risk flags at this time</p>
+                  </div>
                 )}
               </CardContent>
             </Card>
 
             {/* Weekly Recap */}
-            {weeklyReport && (
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle>Weekly Recap</CardTitle>
-                  <CardDescription>
-                    Auto-generated summary for the last {rangeDays} days
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <pre className="text-sm whitespace-pre-wrap font-mono bg-secondary/50 p-4 rounded-lg mb-4">
-                    {weeklyReport.text}
-                  </pre>
-                  <Button onClick={handleCopyReport} variant="outline" className="w-full">
+            <Card className="glass-card glow">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Calendar className="w-5 h-5" />
+                      Weekly Recap
+                    </CardTitle>
+                    <CardDescription>
+                      Auto-generated team summary
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyReport}
+                    disabled={!weeklyReport?.text}
+                  >
                     {copied ? (
                       <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
                         Copied!
                       </>
                     ) : (
                       <>
                         <Copy className="w-4 h-4 mr-2" />
-                        Copy to Clipboard
+                        Copy
                       </>
                     )}
                   </Button>
-                </CardContent>
-              </Card>
-            )}
-          </>
-        )}
-
-        {/* Custom Date Popup */}
-        {showCustomDatePopup && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <Card className="glass-card max-w-md w-full">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Custom Date Range</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setShowCustomDatePopup(false);
-                      setCustomDays("");
-                    }}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
                 </div>
-                <CardDescription>
-                  Enter the number of days to filter the dashboard data
-                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Number of Days
-                  </label>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 14, 45, 90"
-                    value={customDays}
-                    onChange={(e) => setCustomDays(e.target.value)}
-                    min="1"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const days = parseInt(customDays);
-                        if (days > 0) {
-                          setRangeDays(days);
-                          setShowCustomDatePopup(false);
-                          setCustomDays("");
-                        }
-                      }
-                    }}
-                  />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowCustomDatePopup(false);
-                      setCustomDays("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const days = parseInt(customDays);
-                      if (days > 0) {
-                        setRangeDays(days);
-                        setShowCustomDatePopup(false);
-                        setCustomDays("");
-                      }
-                    }}
-                    disabled={!customDays || parseInt(customDays) <= 0}
-                  >
-                    Apply
-                  </Button>
-                </div>
+              <CardContent>
+                {weeklyReport?.text ? (
+                  <div className="prose prose-invert max-w-none">
+                    <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans bg-secondary/30 p-4 rounded-lg">
+                      {weeklyReport.text}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No report available yet</p>
+                    <p className="text-xs mt-2">Sync data to generate a report</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
-        )}
+
+        </div>
       </main>
     </div>
   );
 }
-

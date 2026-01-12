@@ -36,6 +36,45 @@ class MetricsService:
         return weights
     
     @staticmethod
+    def _get_internal_orgs_config() -> Dict[str, List]:
+        """Get internal organizations and repos configuration."""
+        import json
+        
+        orgs_setting = Settings.query.filter_by(key='internal_organizations').first()
+        repos_setting = Settings.query.filter_by(key='internal_repos').first()
+        
+        organizations = json.loads(orgs_setting.value) if orgs_setting else []
+        repos = json.loads(repos_setting.value) if repos_setting else []
+        
+        return {
+            "organizations": organizations,
+            "repos": repos
+        }
+    
+    @staticmethod
+    def _is_internal_contributor(login: str, repo_full_name: str, team_logins: set, internal_orgs_config: Dict) -> bool:
+        """
+        Determine if a contributor is internal based on:
+        1. Team member list
+        2. Internal organizations (repo owner is in internal orgs)
+        3. Internal repos list (repo is explicitly listed)
+        """
+        # Check if contributor is in team members
+        if login in team_logins:
+            return True
+        
+        # Check if repo is in internal repos list
+        if repo_full_name in internal_orgs_config.get("repos", []):
+            return True
+        
+        # Check if repo owner is in internal organizations
+        repo_owner = repo_full_name.split('/')[0] if '/' in repo_full_name else None
+        if repo_owner and repo_owner in internal_orgs_config.get("organizations", []):
+            return True
+        
+        return False
+    
+    @staticmethod
     def get_dashboard_data(range_days: Optional[int] = 7) -> Dict:
         """Get all dashboard data including metrics and risk flags."""
         until = datetime.now(timezone.utc)
@@ -44,6 +83,11 @@ class MetricsService:
             since = datetime(2000, 1, 1, tzinfo=timezone.utc)  # GitHub was founded in 2008, but use 2000 to be safe
         else:
             since = until - timedelta(days=range_days)
+        
+        # Normalize to start of day for since and end of day for until
+        # This ensures we include all commits from the date range, even if stored dates are timezone-naive
+        since = since.replace(hour=0, minute=0, second=0, microsecond=0)
+        until = until.replace(hour=23, minute=59, second=59, microsecond=999999)
         
         repos = Repository.query.all()
         if not repos:
@@ -58,8 +102,11 @@ class MetricsService:
         # Get team members
         team_logins = {tm.github_login for tm in TeamMember.query.filter_by(is_active=True).all()}
         
+        # Get internal organizations and repos configuration
+        internal_orgs_config = MetricsService._get_internal_orgs_config()
+        
         # Compute team summary
-        team_summary = MetricsService._compute_team_summary(repos, since, until, team_logins)
+        team_summary = MetricsService._compute_team_summary(repos, since, until, team_logins, internal_orgs_config)
         
         # Compute per-repo summaries
         repo_summaries = [
@@ -71,7 +118,7 @@ class MetricsService:
         risk_flags = MetricsService._compute_risk_flags(repos, since, until, team_logins)
         
         # Get contributor breakdown
-        contributors = MetricsService._get_contributor_breakdown(repos, since, until, team_logins)
+        contributors = MetricsService._get_contributor_breakdown(repos, since, until, team_logins, internal_orgs_config)
         
         # Last synced time
         last_synced = None
@@ -90,9 +137,12 @@ class MetricsService:
         }
     
     @staticmethod
-    def _compute_team_summary(repos: List[Repository], since: datetime, until: datetime, team_logins: set) -> Dict:
+    def _compute_team_summary(repos: List[Repository], since: datetime, until: datetime, team_logins: set, internal_orgs_config: Dict) -> Dict:
         """Compute team-level summary metrics."""
         repo_ids = [r.id for r in repos]
+        
+        # Create repo id to full_name mapping
+        repo_map = {r.id: r.full_name for r in repos}
         
         # Query aggregated stats
         stats = DailyStats.query.filter(
@@ -101,27 +151,51 @@ class MetricsService:
             DailyStats.date <= until
         ).all()
         
-        total_commits = 0
-        total_prs_opened = 0
-        total_prs_merged = 0
-        total_issues_closed = 0
+        # Fetch all contributors upfront to avoid N+1 queries
+        contributor_ids = list(set(stat.contributor_id for stat in stats))
+        contributors_list = Contributor.query.filter(Contributor.id.in_(contributor_ids)).all()
+        contributors_map = {c.id: c for c in contributors_list}
         
-        internal_commits = 0
-        external_commits = 0
+        # Aggregate by GitHub user (not by contributor_id, since same user can have multiple contributor records)
+        user_stats = defaultdict(lambda: {
+            "commits": 0,
+            "prs_opened": 0,
+            "prs_merged": 0,
+            "issues_closed": 0,
+            "login": None,
+            "is_internal": False
+        })
         
         for stat in stats:
-            contributor = Contributor.query.get(stat.contributor_id)
-            is_internal = contributor.login in team_logins if contributor else False
+            contributor = contributors_map.get(stat.contributor_id)
+            if not contributor:
+                continue
             
-            total_commits += stat.commits_count
-            total_prs_opened += stat.prs_opened
-            total_prs_merged += stat.prs_merged
-            total_issues_closed += stat.issues_closed
+            # Get repo full name for this stat
+            repo_full_name = repo_map.get(stat.repo_id, "")
             
+            # Use github_id as the key to aggregate same user across multiple repos
+            github_id = contributor.github_id
+            login = contributor.login
+            is_internal = MetricsService._is_internal_contributor(login, repo_full_name, team_logins, internal_orgs_config)
+            
+            user_stats[github_id]["commits"] += stat.commits_count
+            user_stats[github_id]["prs_opened"] += stat.prs_opened
+            user_stats[github_id]["prs_merged"] += stat.prs_merged
+            user_stats[github_id]["issues_closed"] += stat.issues_closed
+            user_stats[github_id]["login"] = login
+            # Mark as internal if ANY of their work is internal
             if is_internal:
-                internal_commits += stat.commits_count
-            else:
-                external_commits += stat.commits_count
+                user_stats[github_id]["is_internal"] = True
+        
+        # Now sum up totals from the aggregated user stats
+        total_commits = sum(u["commits"] for u in user_stats.values())
+        total_prs_opened = sum(u["prs_opened"] for u in user_stats.values())
+        total_prs_merged = sum(u["prs_merged"] for u in user_stats.values())
+        total_issues_closed = sum(u["issues_closed"] for u in user_stats.values())
+        
+        internal_commits = sum(u["commits"] for u in user_stats.values() if u["is_internal"])
+        external_commits = sum(u["commits"] for u in user_stats.values() if not u["is_internal"])
         
         # Calculate momentum score
         weights = MetricsService.get_weights()
@@ -182,16 +256,23 @@ class MetricsService:
         }
     
     @staticmethod
-    def _get_contributor_breakdown(repos: List[Repository], since: datetime, until: datetime, team_logins: set) -> List[Dict]:
+    def _get_contributor_breakdown(repos: List[Repository], since: datetime, until: datetime, team_logins: set, internal_orgs_config: Dict) -> List[Dict]:
         """Get per-contributor stats."""
         repo_ids = [r.id for r in repos]
         
-        # Group stats by contributor
-        contributor_stats = defaultdict(lambda: {
+        # Create repo id to full_name mapping
+        repo_map = {r.id: r.full_name for r in repos}
+        
+        # Group stats by GitHub user (not by contributor_id, since same user can have multiple contributor records across repos)
+        user_stats = defaultdict(lambda: {
             "commits": 0,
             "prs_opened": 0,
             "prs_merged": 0,
-            "issues_closed": 0
+            "issues_closed": 0,
+            "login": None,
+            "name": None,
+            "avatar_url": None,
+            "is_internal": False
         })
         
         stats = DailyStats.query.filter(
@@ -200,23 +281,40 @@ class MetricsService:
             DailyStats.date <= until
         ).all()
         
+        # Fetch all contributors upfront to avoid N+1 queries
+        contributor_ids = list(set(stat.contributor_id for stat in stats))
+        contributors_list = Contributor.query.filter(Contributor.id.in_(contributor_ids)).all()
+        contributors_map = {c.id: c for c in contributors_list}
+        
         for stat in stats:
-            contributor_stats[stat.contributor_id]["commits"] += stat.commits_count
-            contributor_stats[stat.contributor_id]["prs_opened"] += stat.prs_opened
-            contributor_stats[stat.contributor_id]["prs_merged"] += stat.prs_merged
-            contributor_stats[stat.contributor_id]["issues_closed"] += stat.issues_closed
+            contributor = contributors_map.get(stat.contributor_id)
+            if not contributor:
+                continue
+            
+            # Get repo full name for this stat
+            repo_full_name = repo_map.get(stat.repo_id, "")
+            
+            # Use github_id as the key to aggregate same user across multiple repos
+            github_id = contributor.github_id
+            
+            is_internal = MetricsService._is_internal_contributor(contributor.login, repo_full_name, team_logins, internal_orgs_config)
+            
+            user_stats[github_id]["commits"] += stat.commits_count
+            user_stats[github_id]["prs_opened"] += stat.prs_opened
+            user_stats[github_id]["prs_merged"] += stat.prs_merged
+            user_stats[github_id]["issues_closed"] += stat.issues_closed
+            user_stats[github_id]["login"] = contributor.login
+            user_stats[github_id]["name"] = contributor.name
+            user_stats[github_id]["avatar_url"] = contributor.avatar_url
+            # Mark as internal if ANY of their work is internal
+            if is_internal:
+                user_stats[github_id]["is_internal"] = True
         
         # Build result
         weights = MetricsService.get_weights()
         results = []
         
-        for contributor_id, metrics in contributor_stats.items():
-            contributor = Contributor.query.get(contributor_id)
-            if not contributor:
-                continue
-            
-            is_internal = contributor.login in team_logins
-            
+        for github_id, metrics in user_stats.items():
             momentum_score = (
                 metrics["commits"] * weights["commits"] +
                 metrics["prs_opened"] * weights["prs_opened"] +
@@ -225,10 +323,10 @@ class MetricsService:
             )
             
             results.append({
-                "login": contributor.login,
-                "name": contributor.name,
-                "avatar_url": contributor.avatar_url,
-                "is_internal": is_internal,
+                "login": metrics["login"],
+                "name": metrics["name"],
+                "avatar_url": metrics["avatar_url"],
+                "is_internal": metrics["is_internal"],
                 "commits": metrics["commits"],
                 "prs_opened": metrics["prs_opened"],
                 "prs_merged": metrics["prs_merged"],
@@ -254,11 +352,16 @@ class MetricsService:
         repo_ids = [r.id for r in repos]
         
         # Check for repos with no recent activity
+        # Normalize since to start of day for proper comparison with stored dates
+        since_normalized = since.replace(hour=0, minute=0, second=0, microsecond=0) if since else None
         for repo in repos:
-            stats = DailyStats.query.filter(
-                DailyStats.repo_id == repo.id,
-                DailyStats.date >= since
-            ).all()
+            if since_normalized:
+                stats = DailyStats.query.filter(
+                    DailyStats.repo_id == repo.id,
+                    DailyStats.date >= since_normalized
+                ).all()
+            else:
+                stats = DailyStats.query.filter_by(repo_id=repo.id).all()
             
             if not stats or all(s.commits_count == 0 and s.prs_merged == 0 for s in stats):
                 flags.append({
@@ -270,11 +373,15 @@ class MetricsService:
                 })
         
         # Check for single point of failure (one person doing most work)
+        since_normalized = since.replace(hour=0, minute=0, second=0, microsecond=0) if since else None
         for repo in repos:
-            stats = DailyStats.query.filter(
-                DailyStats.repo_id == repo.id,
-                DailyStats.date >= since
-            ).all()
+            if since_normalized:
+                stats = DailyStats.query.filter(
+                    DailyStats.repo_id == repo.id,
+                    DailyStats.date >= since_normalized
+                ).all()
+            else:
+                stats = DailyStats.query.filter_by(repo_id=repo.id).all()
             
             contributor_commits = defaultdict(int)
             total = 0
@@ -304,11 +411,18 @@ class MetricsService:
             for contrib in contributors:
                 if contrib.login not in team_logins:
                     # Check if they have recent commits
-                    recent_stats = DailyStats.query.filter(
-                        DailyStats.repo_id == repo.id,
-                        DailyStats.contributor_id == contrib.id,
-                        DailyStats.date >= since
-                    ).all()
+                    since_normalized = since.replace(hour=0, minute=0, second=0, microsecond=0) if since else None
+                    if since_normalized:
+                        recent_stats = DailyStats.query.filter(
+                            DailyStats.repo_id == repo.id,
+                            DailyStats.contributor_id == contrib.id,
+                            DailyStats.date >= since_normalized
+                        ).all()
+                    else:
+                        recent_stats = DailyStats.query.filter_by(
+                            repo_id=repo.id,
+                            contributor_id=contrib.id
+                        ).all()
                     
                     if any(s.commits_count > 0 for s in recent_stats):
                         flags.append({
@@ -332,6 +446,93 @@ class MetricsService:
             except ValueError:
                 pass
         return default
+    
+    @staticmethod
+    def get_daily_commits(range_days: Optional[int] = 7) -> Dict:
+        """Get daily commit counts for charting."""
+        until = datetime.now(timezone.utc)
+        # If range_days is None, use a very early date (effectively all time)
+        if range_days is None:
+            since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        else:
+            since = until - timedelta(days=range_days)
+        
+        # Normalize to start of day for since and end of day for until
+        since = since.replace(hour=0, minute=0, second=0, microsecond=0)
+        until = until.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        repos = Repository.query.all()
+        if not repos:
+            return {"daily_commits": [], "internal_external_split": []}
+        
+        repo_ids = [r.id for r in repos]
+        
+        # Get team members and internal orgs config
+        team_logins = {tm.github_login for tm in TeamMember.query.filter_by(is_active=True).all()}
+        internal_orgs_config = MetricsService._get_internal_orgs_config()
+        repo_map = {r.id: r.full_name for r in repos}
+        
+        # Group commits by date
+        stats = DailyStats.query.filter(
+            DailyStats.repo_id.in_(repo_ids),
+            DailyStats.date >= since,
+            DailyStats.date <= until
+        ).all()
+        
+        # Fetch all contributors upfront
+        contributor_ids = list(set(stat.contributor_id for stat in stats))
+        contributors_list = Contributor.query.filter(Contributor.id.in_(contributor_ids)).all()
+        contributors_map = {c.id: c for c in contributors_list}
+        
+        # Aggregate by date
+        daily_data = defaultdict(lambda: {"total": 0, "internal": 0, "external": 0})
+        
+        for stat in stats:
+            contributor = contributors_map.get(stat.contributor_id)
+            if not contributor:
+                continue
+            
+            # Get repo full name
+            repo_full_name = repo_map.get(stat.repo_id, "")
+            
+            # Determine if internal
+            is_internal = MetricsService._is_internal_contributor(
+                contributor.login, repo_full_name, team_logins, internal_orgs_config
+            )
+            
+            # Format date as YYYY-MM-DD
+            date_str = stat.date.strftime("%Y-%m-%d")
+            
+            daily_data[date_str]["total"] += stat.commits_count
+            if is_internal:
+                daily_data[date_str]["internal"] += stat.commits_count
+            else:
+                daily_data[date_str]["external"] += stat.commits_count
+        
+        # Convert to sorted list
+        daily_commits = [
+            {
+                "date": date_str,
+                "commits": data["total"],
+                "internal": data["internal"],
+                "external": data["external"]
+            }
+            for date_str, data in sorted(daily_data.items())
+        ]
+        
+        # Calculate overall internal/external split
+        total_internal = sum(d["internal"] for d in daily_commits)
+        total_external = sum(d["external"] for d in daily_commits)
+        
+        internal_external_split = [
+            {"category": "Internal", "count": total_internal},
+            {"category": "External", "count": total_external}
+        ]
+        
+        return {
+            "daily_commits": daily_commits,
+            "internal_external_split": internal_external_split
+        }
     
     @staticmethod
     def get_weekly_recap(range_days: Optional[int] = 7) -> str:

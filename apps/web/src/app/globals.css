@@ -12,8 +12,8 @@
     --popover: 0 0% 5%;
     --popover-foreground: 0 0% 100%;
     
-    /* Accent color (default: blue) - will be overridden by theme */
-    --accent: 210 100% 50%;
+    /* Accent color (default: gold) - will be overridden by theme */
+    --accent: 45 65% 52%;
     --primary: var(--accent);
     --primary-foreground: 0 0% 0%;
     --ring: var(--accent);
@@ -96,5 +96,83 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
+}
+
+/* Background Patterns */
+.bg-pattern-dots {
+  background-image: 
+    radial-gradient(circle, hsl(var(--accent) / 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+}
+
+.bg-pattern-grid {
+  background-image: 
+    linear-gradient(hsl(var(--accent) / 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--accent) / 0.1) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.bg-pattern-waves {
+  background-image: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 10px,
+      hsl(var(--accent) / 0.08) 10px,
+      hsl(var(--accent) / 0.08) 20px
+    );
+}
+
+.bg-pattern-circuit {
+  background-image: 
+    linear-gradient(hsl(var(--accent) / 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--accent) / 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: 0 0, 20px 20px;
+}
+
+.bg-pattern-hexagon {
+  background-image: 
+    repeating-linear-gradient(
+      60deg,
+      transparent,
+      transparent 20px,
+      hsl(var(--accent) / 0.08) 20px,
+      hsl(var(--accent) / 0.08) 21px
+    ),
+    repeating-linear-gradient(
+      120deg,
+      transparent,
+      transparent 20px,
+      hsl(var(--accent) / 0.08) 20px,
+      hsl(var(--accent) / 0.08) 21px
+    );
+}
+
+.bg-pattern-lines {
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(var(--accent) / 0.1) 2px,
+      hsl(var(--accent) / 0.1) 4px
+    );
+}
+
+.bg-pattern-radial {
+  background-image: 
+    radial-gradient(circle at 50% 50%, hsl(var(--accent) / 0.12) 0%, transparent 50%);
+  background-size: 60px 60px;
+  background-position: 0 0;
+}
+
+.bg-pattern-mesh {
+  background-image: 
+    linear-gradient(hsl(var(--accent) / 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--accent) / 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
 }
 

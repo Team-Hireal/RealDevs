@@ -207,23 +207,42 @@ class SyncService:
         # Group by contributor and date
         commit_counts = defaultdict(lambda: defaultdict(int))
         
+        skipped_no_author = 0
+        skipped_no_id_login = 0
+        processed_count = 0
+        
         for commit in commits:
             if not commit.get('author'):
+                skipped_no_author += 1
+                logger.debug(f"Skipping commit {commit.get('sha', 'unknown')[:8]}: no author field")
                 continue
             
             author = commit['author']
             if not author:
+                skipped_no_author += 1
+                logger.debug(f"Skipping commit {commit.get('sha', 'unknown')[:8]}: author is null")
                 continue
             
             commit_date_str = commit['commit']['author']['date']
             commit_date = SyncService._parse_github_date(commit_date_str)
+            
+            # Filter commits by date range (GitHub API may return commits slightly outside range)
+            if commit_date < since or commit_date > until:
+                skipped_no_id_login += 1
+                logger.debug(f"Skipping commit {commit.get('sha', 'unknown')[:8]}: outside date range ({commit_date.date()})")
+                continue
+            
             day = commit_date.date()
             
             github_id = author.get('id')
             login = author.get('login')
             
             if not github_id or not login:
+                skipped_no_id_login += 1
+                logger.debug(f"Skipping commit {commit.get('sha', 'unknown')[:8]}: missing github_id or login (id={github_id}, login={login})")
                 continue
+            
+            processed_count += 1
             
             # Ensure contributor exists
             contributor = Contributor.query.filter_by(
@@ -243,6 +262,8 @@ class SyncService:
                 db.session.flush()
             
             commit_counts[contributor.id][day] += 1
+        
+        logger.info(f"  Processed {processed_count} commits, skipped {skipped_no_author + skipped_no_id_login} (no author: {skipped_no_author}, no id/login: {skipped_no_id_login})")
         
         # Update or create daily stats
         for contributor_id, day_counts in commit_counts.items():

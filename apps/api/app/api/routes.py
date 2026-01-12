@@ -186,6 +186,23 @@ def dashboard():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@api_bp.route('/dashboard/daily-commits', methods=['GET'])
+def daily_commits():
+    """Get daily commit data for charts."""
+    try:
+        range_days_param = request.args.get('range_days', default='7')
+        # Handle "all" for all-time data
+        if range_days_param == 'all':
+            range_days = None
+        else:
+            range_days = int(range_days_param)
+        data = MetricsService.get_daily_commits(range_days)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"Error getting daily commits: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @api_bp.route('/report/weekly', methods=['GET'])
 def weekly_report():
     """Get weekly recap text."""

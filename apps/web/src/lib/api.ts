@@ -165,6 +165,33 @@ class ApiClient {
     return this.request<DashboardData>(`/dashboard?range_days=${param}`)
   }
 
+  async getDailyCommits(rangeDays: number | null = 7): Promise<{
+    daily_commits: Array<{
+      date: string
+      commits: number
+      internal: number
+      external: number
+    }>
+    internal_external_split: Array<{
+      category: string
+      count: number
+    }>
+  }> {
+    const param = rangeDays === null ? 'all' : rangeDays
+    return this.request<{
+      daily_commits: Array<{
+        date: string
+        commits: number
+        internal: number
+        external: number
+      }>
+      internal_external_split: Array<{
+        category: string
+        count: number
+      }>
+    }>(`/dashboard/daily-commits?range_days=${param}`)
+  }
+
   async getWeeklyReport(rangeDays: number | null = 7) {
     const param = rangeDays === null ? 'all' : rangeDays
     return this.request<{ text: string }>(`/report/weekly?range_days=${param}`)
