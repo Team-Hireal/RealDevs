@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
@@ -22,6 +23,7 @@ import {
   GitPullRequest,
   CheckCircle2,
   RefreshCw,
+  Key,
   Copy,
   Calendar,
   ExternalLink,
@@ -55,9 +57,16 @@ export default function DashboardPage() {
   const [isCustomDateOpen, setIsCustomDateOpen] = useState(false);
   const [customDaysInput, setCustomDaysInput] = useState<string>("");
   const [isCustomRange, setIsCustomRange] = useState(false);
+  const [dismissedPatPrompt, setDismissedPatPrompt] = useState(false);
   const customDatePopupRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const { accentColor } = useTheme();
+  const router = useRouter();
+
+  const { data: authStatus } = useQuery({
+    queryKey: ["auth-status"],
+    queryFn: () => api.getAuthStatus(),
+  });
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ["dashboard", rangeDays],
@@ -449,6 +458,12 @@ export default function DashboardPage() {
     return result.sort((a, b) => b.value - a.value);
   }, [dailyCommitsData, accentColor]);
 
+  const shouldShowPatPrompt = useMemo(() => {
+    if (!authStatus) return false;
+    if (dismissedPatPrompt) return false;
+    return !authStatus.configured;
+  }, [authStatus, dismissedPatPrompt]);
+
   if (isLoading) {
     return (
       <div className="flex h-screen bg-background">
@@ -470,11 +485,55 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
-      <Navigation />
-      
-      <main className="flex-1 p-8 overflow-auto">
-        <div className="max-w-7xl mx-auto">
+    <>
+      {shouldShowPatPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="max-w-lg w-full px-4">
+            <Card className="glass-card border-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="w-5 h-5" />
+                  GitHub Personal Access Token Required
+                </CardTitle>
+                <CardDescription>
+                  We couldn't detect a configured GitHub Personal Access Token (PAT). Configure one to unlock your team's dashboard.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p className="font-semibold">How to proceed:</p>
+                  <ol className="list-decimal list-inside space-y-1 ml-2">
+                    <li>Click &quot;Configure PAT&quot; to open the Credentials page.</li>
+                    <li>Follow the instructions there to create a fine-grained, read-only PAT on GitHub.</li>
+                    <li>Paste your PAT and submit it – we&apos;ll handle the initial sync automatically.</li>
+                  </ol>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                  <Button
+                    variant="ghost"
+                    className="sm:flex-1"
+                    onClick={() => setDismissedPatPrompt(true)}
+                  >
+                    Maybe later
+                  </Button>
+                  <Button
+                    className="sm:flex-1"
+                    onClick={() => router.push("/credentials")}
+                  >
+                    Configure PAT
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      <div className="flex h-screen bg-background">
+        <Navigation />
+        
+        <main className="flex-1 p-8 overflow-auto">
+          <div className="max-w-7xl mx-auto">
           {/* Header with Controls */}
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -1663,5 +1722,6 @@ export default function DashboardPage() {
         </div>
       </main>
     </div>
+    </>
   );
 }
