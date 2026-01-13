@@ -1075,7 +1075,7 @@ export default function DashboardPage() {
                             cy="50%"
                             labelLine={false}
                             outerRadius={70}
-                            innerRadius={30}
+                            innerRadius={40}
                             paddingAngle={2}
                             dataKey="value"
                           >

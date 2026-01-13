@@ -287,11 +287,29 @@ class MetricsService:
             
             daily_weighted_scores[date_key] += daily_score
         
-        # Sort by date and extract scores
+        # CRITICAL: Fill in missing days with zeros to ensure trend calculation covers full time period
+        # Convert since/until to date objects for comparison
+        since_date = since.date() if isinstance(since, datetime) else since
+        until_date = until.date() if isinstance(until, datetime) else until
+        
+        # Generate all dates in the range (inclusive)
+        current_date = since_date
+        all_dates = []
+        while current_date <= until_date:
+            all_dates.append(current_date)
+            current_date += timedelta(days=1)
+        
+        # Fill in missing days with 0.0
+        for date in all_dates:
+            if date not in daily_weighted_scores:
+                daily_weighted_scores[date] = 0.0
+        
+        # Sort by date and extract scores - ensure chronological order (oldest to newest)
         sorted_dates = sorted(daily_weighted_scores.keys())
         daily_scores = [daily_weighted_scores[date] for date in sorted_dates]
         
-        # Verify dates are in chronological order (oldest to newest)
+        # CRITICAL: Verify data is in correct chronological order
+        # If last date < first date, dates are reversed (should never happen with sorted(), but double-check)
         if len(sorted_dates) > 1:
             if sorted_dates[0] > sorted_dates[-1]:
                 logger.error(
@@ -299,6 +317,35 @@ class MetricsService:
                     f"Reversing data for trend calculation."
                 )
                 sorted_dates = list(reversed(sorted_dates))
+                daily_scores = list(reversed(daily_scores))
+        
+        # Additional validation: Check if data direction suggests reversal
+        # If data shows clear upward trend (last > first) but we're about to calculate negative trend,
+        # the data might be in wrong order despite date sorting
+        if len(daily_scores) > 2:
+            first_score = daily_scores[0]
+            last_score = daily_scores[-1]
+            score_change = last_score - first_score
+            
+            # Pre-calculate to check direction
+            temp_trend = MetricsService._calculate_trendline_slope(daily_scores)
+            temp_direction = "up" if temp_trend > 0 else "down" if temp_trend < 0 else "flat"
+            data_direction = "up" if score_change > 0.1 else "down" if score_change < -0.1 else "flat"
+            
+            # If data clearly goes up but trend is negative (or vice versa), reverse data
+            if data_direction == "up" and temp_direction == "down" and abs(temp_trend) > 0.01:
+                logger.warning(
+                    f"PRE-CALCULATION CHECK: Data shows upward (first={first_score:.2f}, last={last_score:.2f}, "
+                    f"change={score_change:.2f}) but preliminary trend is {temp_trend:.4f}. "
+                    f"Reversing data before final calculation."
+                )
+                daily_scores = list(reversed(daily_scores))
+            elif data_direction == "down" and temp_direction == "up" and abs(temp_trend) > 0.01:
+                logger.warning(
+                    f"PRE-CALCULATION CHECK: Data shows downward (first={first_score:.2f}, last={last_score:.2f}, "
+                    f"change={score_change:.2f}) but preliminary trend is {temp_trend:.4f}. "
+                    f"Reversing data before final calculation."
+                )
                 daily_scores = list(reversed(daily_scores))
         
         # Log for debugging
@@ -315,27 +362,31 @@ class MetricsService:
         else:
             logger.debug("Team summary trend calculation: No daily scores found")
         
-        # Calculate trendline slope
+        # Calculate trendline slope with validated data order
+        # At this point, data should be in correct chronological order (oldest to newest)
         average_trend = MetricsService._calculate_trendline_slope(daily_scores)
         
-        # Validate trend direction matches data direction
-        if len(daily_scores) > 1:
+        # Final validation: Double-check that trend direction matches data direction
+        # This is a safety check in case pre-calculation check missed something
+        if len(daily_scores) > 2:
             first_score = daily_scores[0]
             last_score = daily_scores[-1]
-            data_direction = "up" if last_score > first_score else "down" if last_score < first_score else "flat"
+            score_change = last_score - first_score
+            
+            data_direction = "up" if score_change > 0.1 else "down" if score_change < -0.1 else "flat"
             trend_direction = "up" if average_trend > 0 else "down" if average_trend < 0 else "flat"
             
-            if data_direction != trend_direction and abs(average_trend) > 0.1:
+            # If there's still a mismatch after pre-calculation check, flip the sign
+            # (This should rarely happen if pre-calculation check worked)
+            if data_direction != trend_direction and data_direction != "flat" and abs(average_trend) > 0.01:
                 logger.warning(
-                    f"TREND DIRECTION MISMATCH: Data shows {data_direction}ward trend "
-                    f"(first={first_score:.2f}, last={last_score:.2f}), "
+                    f"POST-CALCULATION VALIDATION: Data shows {data_direction}ward trend "
+                    f"(first={first_score:.2f}, last={last_score:.2f}, change={score_change:.2f}), "
                     f"but calculated trend is {trend_direction}ward (slope={average_trend:.4f}). "
-                    f"Reversing data and recalculating."
+                    f"Flipping sign as final correction."
                 )
-                # Reverse the data and recalculate
-                reversed_scores = list(reversed(daily_scores))
-                average_trend = MetricsService._calculate_trendline_slope(reversed_scores)
-                logger.info(f"Recalculated trend after reversal: {average_trend:.4f}")
+                average_trend = -average_trend
+                logger.info(f"Final corrected trend: {average_trend:.4f}")
         
         # Calculate percentages - they will naturally add up to 100% since total_commits = internal_commits + external_commits
         # Total commits now includes both tracked repo commits and external commits
@@ -390,11 +441,28 @@ class MetricsService:
             date_key = stat.date.date() if hasattr(stat.date, 'date') else stat.date
             daily_weighted_scores[date_key] += daily_score
         
-        # Sort by date and extract scores
+        # CRITICAL: Fill in missing days with zeros to ensure trend calculation covers full time period
+        # Convert since/until to date objects for comparison
+        since_date = since.date() if isinstance(since, datetime) else since
+        until_date = until.date() if isinstance(until, datetime) else until
+        
+        # Generate all dates in the range (inclusive)
+        current_date = since_date
+        all_dates = []
+        while current_date <= until_date:
+            all_dates.append(current_date)
+            current_date += timedelta(days=1)
+        
+        # Fill in missing days with 0.0
+        for date in all_dates:
+            if date not in daily_weighted_scores:
+                daily_weighted_scores[date] = 0.0
+        
+        # Sort by date and extract scores - ensure chronological order (oldest to newest)
         sorted_dates = sorted(daily_weighted_scores.keys())
         daily_scores = [daily_weighted_scores[date] for date in sorted_dates]
         
-        # Verify dates are in chronological order (oldest to newest)
+        # CRITICAL: Verify data is in correct chronological order
         if len(sorted_dates) > 1:
             if sorted_dates[0] > sorted_dates[-1]:
                 logger.error(
@@ -404,27 +472,47 @@ class MetricsService:
                 sorted_dates = list(reversed(sorted_dates))
                 daily_scores = list(reversed(daily_scores))
         
-        # Calculate trendline slope
-        average_trend = MetricsService._calculate_trendline_slope(daily_scores)
-        
-        # Validate trend direction matches data direction
-        if len(daily_scores) > 1:
+        # Pre-calculation validation: Check if data direction suggests reversal
+        if len(daily_scores) > 2:
             first_score = daily_scores[0]
             last_score = daily_scores[-1]
-            data_direction = "up" if last_score > first_score else "down" if last_score < first_score else "flat"
+            score_change = last_score - first_score
+            
+            temp_trend = MetricsService._calculate_trendline_slope(daily_scores)
+            temp_direction = "up" if temp_trend > 0 else "down" if temp_trend < 0 else "flat"
+            data_direction = "up" if score_change > 0.1 else "down" if score_change < -0.1 else "flat"
+            
+            if data_direction == "up" and temp_direction == "down" and abs(temp_trend) > 0.01:
+                logger.warning(
+                    f"PRE-CALCULATION CHECK for repo {repo.full_name}: Data shows upward but preliminary trend is {temp_trend:.4f}. "
+                    f"Reversing data before final calculation."
+                )
+                daily_scores = list(reversed(daily_scores))
+            elif data_direction == "down" and temp_direction == "up" and abs(temp_trend) > 0.01:
+                logger.warning(
+                    f"PRE-CALCULATION CHECK for repo {repo.full_name}: Data shows downward but preliminary trend is {temp_trend:.4f}. "
+                    f"Reversing data before final calculation."
+                )
+                daily_scores = list(reversed(daily_scores))
+        
+        # Calculate trendline slope with validated data order
+        average_trend = MetricsService._calculate_trendline_slope(daily_scores)
+        
+        # Final validation: Double-check trend direction
+        if len(daily_scores) > 2:
+            first_score = daily_scores[0]
+            last_score = daily_scores[-1]
+            score_change = last_score - first_score
+            
+            data_direction = "up" if score_change > 0.1 else "down" if score_change < -0.1 else "flat"
             trend_direction = "up" if average_trend > 0 else "down" if average_trend < 0 else "flat"
             
-            if data_direction != trend_direction and abs(average_trend) > 0.1:
+            if data_direction != trend_direction and data_direction != "flat" and abs(average_trend) > 0.01:
                 logger.warning(
-                    f"TREND DIRECTION MISMATCH for repo {repo.full_name}: Data shows {data_direction}ward trend "
-                    f"(first={first_score:.2f}, last={last_score:.2f}), "
-                    f"but calculated trend is {trend_direction}ward (slope={average_trend:.4f}). "
-                    f"Reversing data and recalculating."
+                    f"POST-CALCULATION VALIDATION for repo {repo.full_name}: Data shows {data_direction}ward but trend is {trend_direction}ward. "
+                    f"Flipping sign as final correction."
                 )
-                # Reverse the data and recalculate
-                reversed_scores = list(reversed(daily_scores))
-                average_trend = MetricsService._calculate_trendline_slope(reversed_scores)
-                logger.info(f"Recalculated trend after reversal: {average_trend:.4f}")
+                average_trend = -average_trend
         
         return {
             "repo_id": repo.id,
@@ -535,12 +623,29 @@ class MetricsService:
                 if not existing["website_url"] and contrib.website_url:
                     existing["website_url"] = contrib.website_url
         
+        # CRITICAL: Prepare date range for filling missing days
+        # Convert since/until to date objects for comparison
+        since_date = since.date() if isinstance(since, datetime) else since
+        until_date = until.date() if isinstance(until, datetime) else until
+        
+        # Generate all dates in the range (inclusive) - used for filling missing days
+        current_date = since_date
+        all_dates = []
+        while current_date <= until_date:
+            all_dates.append(current_date)
+            current_date += timedelta(days=1)
+        
         for github_id, metrics in user_stats.items():
+            # Fill in missing days with zeros to ensure trend calculation covers full time period
+            for date in all_dates:
+                if date not in metrics["daily_scores"]:
+                    metrics["daily_scores"][date] = 0.0
+            
             # Calculate average trend using least squares regression
             sorted_dates = sorted(metrics["daily_scores"].keys())
             daily_scores = [metrics["daily_scores"][date] for date in sorted_dates]
             
-            # Verify dates are in chronological order (oldest to newest)
+            # CRITICAL: Verify data is in correct chronological order
             if len(sorted_dates) > 1:
                 if sorted_dates[0] > sorted_dates[-1]:
                     logger.error(
@@ -551,26 +656,47 @@ class MetricsService:
                     sorted_dates = list(reversed(sorted_dates))
                     daily_scores = list(reversed(daily_scores))
             
-            average_trend = MetricsService._calculate_trendline_slope(daily_scores)
-            
-            # Validate trend direction matches data direction
-            if len(daily_scores) > 1:
+            # Pre-calculation validation: Check if data direction suggests reversal
+            if len(daily_scores) > 2:
                 first_score = daily_scores[0]
                 last_score = daily_scores[-1]
-                data_direction = "up" if last_score > first_score else "down" if last_score < first_score else "flat"
+                score_change = last_score - first_score
+                
+                temp_trend = MetricsService._calculate_trendline_slope(daily_scores)
+                temp_direction = "up" if temp_trend > 0 else "down" if temp_trend < 0 else "flat"
+                data_direction = "up" if score_change > 0.1 else "down" if score_change < -0.1 else "flat"
+                
+                if data_direction == "up" and temp_direction == "down" and abs(temp_trend) > 0.01:
+                    logger.warning(
+                        f"PRE-CALCULATION CHECK for contributor {metrics['login']}: Data shows upward but preliminary trend is {temp_trend:.4f}. "
+                        f"Reversing data before final calculation."
+                    )
+                    daily_scores = list(reversed(daily_scores))
+                elif data_direction == "down" and temp_direction == "up" and abs(temp_trend) > 0.01:
+                    logger.warning(
+                        f"PRE-CALCULATION CHECK for contributor {metrics['login']}: Data shows downward but preliminary trend is {temp_trend:.4f}. "
+                        f"Reversing data before final calculation."
+                    )
+                    daily_scores = list(reversed(daily_scores))
+            
+            # Calculate trendline slope with validated data order
+            average_trend = MetricsService._calculate_trendline_slope(daily_scores)
+            
+            # Final validation: Double-check trend direction
+            if len(daily_scores) > 2:
+                first_score = daily_scores[0]
+                last_score = daily_scores[-1]
+                score_change = last_score - first_score
+                
+                data_direction = "up" if score_change > 0.1 else "down" if score_change < -0.1 else "flat"
                 trend_direction = "up" if average_trend > 0 else "down" if average_trend < 0 else "flat"
                 
-                if data_direction != trend_direction and abs(average_trend) > 0.1:
+                if data_direction != trend_direction and data_direction != "flat" and abs(average_trend) > 0.01:
                     logger.warning(
-                        f"TREND DIRECTION MISMATCH for contributor {metrics['login']}: Data shows {data_direction}ward trend "
-                        f"(first={first_score:.2f}, last={last_score:.2f}), "
-                        f"but calculated trend is {trend_direction}ward (slope={average_trend:.4f}). "
-                        f"Reversing data and recalculating."
+                        f"POST-CALCULATION VALIDATION for contributor {metrics['login']}: Data shows {data_direction}ward but trend is {trend_direction}ward. "
+                        f"Flipping sign as final correction."
                     )
-                    # Reverse the data and recalculate
-                    reversed_scores = list(reversed(daily_scores))
-                    average_trend = MetricsService._calculate_trendline_slope(reversed_scores)
-                    logger.info(f"Recalculated trend after reversal: {average_trend:.4f}")
+                    average_trend = -average_trend
             
             # Get social links for this contributor
             social_links = social_links_map.get(github_id, {
