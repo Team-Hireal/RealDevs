@@ -263,9 +263,18 @@ export default function CredentialsPage() {
 
   const teamMembersMutation = useMutation({
     mutationFn: (logins: string[]) => api.updateTeamMembers(logins),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+      // Automatically trigger a sync (30 days) when team members are added/updated
+      if (authStatus?.configured) {
+        try {
+          await syncMutation.mutateAsync(30);
+        } catch (error) {
+          console.error("Error syncing after team member update:", error);
+        }
+      }
     },
   });
 
@@ -276,11 +285,11 @@ export default function CredentialsPage() {
       queryClient.invalidateQueries({ queryKey: ["external-contributors"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 
-      // Automatically trigger a sync so new external contributors are reflected in metrics
+      // Automatically trigger a sync (30 days) so new external contributors are reflected in metrics
       if (authStatus?.configured) {
         try {
-          // null = all time, to ensure we fetch full external contribution history
-          await syncMutation.mutateAsync(null);
+          // Sync last 30 days by default when adding external contributors
+          await syncMutation.mutateAsync(30);
         } catch (error) {
           // Swallow errors here – the main update succeeded, sync is best-effort
           console.error("Error auto-syncing after external contributor update:", error);
@@ -1105,7 +1114,7 @@ export default function CredentialsPage() {
 
               {externalContributorsMutation.isSuccess && (
                 <p className="text-sm text-green-600 dark:text-green-400">
-                  External contributors updated! Run a sync to fetch their commits.
+                  External contributors updated! Syncing last 30 days of commits...
                 </p>
               )}
             </CardContent>

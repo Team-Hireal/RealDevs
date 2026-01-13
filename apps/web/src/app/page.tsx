@@ -247,6 +247,22 @@ export default function DashboardPage() {
     return "text-red-500";
   };
 
+  // Helper function to truncate text to 15 words
+  const truncateTo15Words = (text: string): string => {
+    const words = text.trim().split(/\s+/);
+    if (words.length <= 15) return text;
+    return words.slice(0, 15).join(' ') + '...';
+  };
+
+  // Helper function to extract repo name from full path
+  const getRepoName = (repo?: string): string => {
+    if (!repo) return 'N/A';
+    if (repo.includes('/')) {
+      return repo.split('/').pop() || repo;
+    }
+    return repo;
+  };
+
   const topContributor = dashboardData?.contributors
     ?.sort((a, b) => b.average_trend - a.average_trend)[0];
 
@@ -992,84 +1008,74 @@ export default function DashboardPage() {
                 {/* Total and badges on same row */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-3xl font-bold accent-text">
-                  {displayRiskFlags.length}
+                    {displayRiskFlags.length}
+                  </div>
+                  <div className="flex gap-1 flex-wrap">
+                    {displayRiskFlags.filter(f => f.severity === "high").length > 0 && (
+                      <Badge variant="destructive" className="text-xs">
+                        {displayRiskFlags.filter(f => f.severity === "high").length} High
+                      </Badge>
+                    )}
+                    {displayRiskFlags.filter(f => f.severity === "medium").length > 0 && (
+                      <Badge variant="default" className="text-xs">
+                        {displayRiskFlags.filter(f => f.severity === "medium").length} Med
+                      </Badge>
+                    )}
+                    {displayRiskFlags.filter(f => f.severity === "low").length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {displayRiskFlags.filter(f => f.severity === "low").length} Low
+                      </Badge>
+                    )}
+                    {displayRiskFlags.length === 0 && selectedContributor && (
+                      <span className="text-xs text-muted-foreground">No flags</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-1 flex-wrap">
-                  {displayRiskFlags.filter(f => f.severity === "high").length > 0 && (
-                    <Badge variant="destructive" className="text-xs">
-                      {displayRiskFlags.filter(f => f.severity === "high").length} High
-                    </Badge>
-                  )}
-                  {displayRiskFlags.filter(f => f.severity === "medium").length > 0 && (
-                    <Badge variant="default" className="text-xs">
-                      {displayRiskFlags.filter(f => f.severity === "medium").length} Med
-                    </Badge>
-                  )}
-                  {displayRiskFlags.filter(f => f.severity === "low").length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {displayRiskFlags.filter(f => f.severity === "low").length} Low
-                    </Badge>
-                  )}
-                  {displayRiskFlags.length === 0 && selectedContributor && (
-                    <span className="text-xs text-muted-foreground">No flags</span>
-                  )}
-                </div>
-                </div>
-                {/* Two previews for risks */}
+                {/* Preview section with fixed height - one preview per category */}
                 {displayRiskFlags.length > 0 && (
-                  <div className="space-y-1.5 flex-1 flex flex-col justify-end">
-                    {/* Preview 1: High priority (if exists) */}
+                  <div className="space-y-1.5 mt-2" style={{ height: '180px' }}>
+                    {/* High priority preview */}
                     {riskFlagsBySeverity.high.length > 0 && (
-                      <div className="p-1.5 rounded-lg border border-red-500/30 bg-red-500/10">
-                        <div className="flex items-center gap-1 mb-0.5">
+                      <div className="p-2 rounded-lg border border-red-500/30 bg-red-500/10 h-[56px] flex flex-col justify-between">
+                        <div className="flex items-center gap-1.5">
                           <Badge variant="destructive" className="text-xs px-1.5 py-0">High</Badge>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {getSelectedFlag('high')?.title}
+                          <span className="text-xs text-white truncate font-medium">
+                            {getRepoName(getSelectedFlag('high')?.repo)}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {getSelectedFlag('high')?.description}
+                        <p className="text-xs text-muted-foreground line-clamp-1 leading-tight">
+                          {getSelectedFlag('high')?.description ? truncateTo15Words(getSelectedFlag('high')!.description) : ''}
                         </p>
                       </div>
                     )}
-                    {/* Preview 2: Medium (if High exists) or Medium (if no High) or Low (if High+Medium don't exist) */}
-                    {riskFlagsBySeverity.high.length > 0 && riskFlagsBySeverity.medium.length > 0 ? (
-                      <div className="p-1.5 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
-                        <div className="flex items-center gap-1 mb-0.5">
+                    {/* Medium priority preview */}
+                    {riskFlagsBySeverity.medium.length > 0 && (
+                      <div className="p-2 rounded-lg border border-border bg-[hsl(0_0%_8%)] h-[56px] flex flex-col justify-between">
+                        <div className="flex items-center gap-1.5">
                           <Badge variant="default" className="text-xs px-1.5 py-0">Medium</Badge>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {getSelectedFlag('medium')?.title}
+                          <span className="text-xs text-white truncate font-medium">
+                            {getRepoName(getSelectedFlag('medium')?.repo)}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {getSelectedFlag('medium')?.description}
+                        <p className="text-xs text-muted-foreground line-clamp-1 leading-tight">
+                          {getSelectedFlag('medium')?.description ? truncateTo15Words(getSelectedFlag('medium')!.description) : ''}
                         </p>
                       </div>
-                    ) : riskFlagsBySeverity.high.length > 0 && riskFlagsBySeverity.low.length > 0 ? (
-                      <div className="p-1.5 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
-                        <div className="flex items-center gap-1 mb-0.5">
+                    )}
+                    {/* Low priority preview */}
+                    {riskFlagsBySeverity.low.length > 0 && (
+                      <div className="p-2 rounded-lg border border-border bg-[hsl(0_0%_8%)] h-[56px] flex flex-col justify-between">
+                        <div className="flex items-center gap-1.5">
                           <Badge variant="secondary" className="text-xs px-1.5 py-0">Low</Badge>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {getSelectedFlag('low')?.title}
+                          <span className="text-xs text-white truncate font-medium">
+                            {getRepoName(getSelectedFlag('low')?.repo)}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {getSelectedFlag('low')?.description}
+                        <p className="text-xs text-muted-foreground line-clamp-1 leading-tight">
+                          {getSelectedFlag('low')?.description ? truncateTo15Words(getSelectedFlag('low')!.description) : ''}
                         </p>
                       </div>
-                    ) : riskFlagsBySeverity.medium.length > 0 ? (
-                      <div className="p-1.5 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <Badge variant="default" className="text-xs px-1.5 py-0">Medium</Badge>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {getSelectedFlag('medium')?.title}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {getSelectedFlag('medium')?.description}
-                        </p>
-                      </div>
-                    ) : null}
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -1205,7 +1211,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {sortedRepoContributions && sortedRepoContributions.length > 0 ? (
-                  <div className="flex items-start gap-6">
+                  <div className="flex items-center gap-6">
                     <div className="shrink-0" style={{ width: 200, height: 180 }}>
                       <PieChart width={200} height={180}>
                           <defs>
@@ -1271,7 +1277,7 @@ export default function DashboardPage() {
                           />
                         </PieChart>
                     </div>
-                    <div className="flex-1 space-y-2 max-h-[180px] overflow-y-auto">
+                    <div className="flex-1 space-y-2 max-h-[300px] overflow-y-auto">
                       {sortedRepoContributions.map((entry, index) => {
                         const color = `hsl(${entry.hue} ${entry.saturation} ${entry.lightness})`;
                         // Handle "External" category specially, otherwise extract repo name

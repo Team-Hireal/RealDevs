@@ -644,11 +644,30 @@ class MetricsService:
             github_id = ext_commit.github_user_id
             login = ext_commit.github_user_login
             
+            # Skip if no github_id (can't track without it)
+            if not github_id:
+                logger.warning(f"Skipping ExternalCommit for {login}: no github_user_id")
+                continue
+            
             # Check if this user is explicitly marked as external contributor
             is_external_contributor = ExternalContributor.query.filter_by(
                 github_login=login,
                 is_active=True
             ).first() is not None
+            
+            # Initialize user_stats entry if it doesn't exist (for users who ONLY have ExternalCommit records)
+            if github_id not in user_stats:
+                user_stats[github_id] = {
+                    "commits": 0,
+                    "prs_opened": 0,
+                    "prs_merged": 0,
+                    "issues_closed": 0,
+                    "login": login,
+                    "name": None,
+                    "avatar_url": None,
+                    "is_internal": False,  # ExternalCommit records are always external
+                    "daily_scores": defaultdict(float)
+                }
             
             # Increment commit count for this user
             user_stats[github_id]["commits"] += 1
@@ -657,10 +676,9 @@ class MetricsService:
             # If user is explicitly marked as external contributor, ensure they're marked as external
             if is_external_contributor:
                 user_stats[github_id]["is_internal"] = False
-            # If user is a team member, they might have both internal and external commits
-            # But ExternalCommit records themselves are always external, so don't mark as internal
-            # Only mark as internal if they have internal commits from DailyStats
-            # (which is already handled above in the DailyStats processing loop)
+            # ExternalCommit records themselves are always external, so ensure is_internal is False
+            # (don't mark as internal even if they're team members - the commit itself is external)
+            user_stats[github_id]["is_internal"] = False
             
             # Preserve login if not already set from internal stats
             if not user_stats[github_id]["login"]:
@@ -958,11 +976,27 @@ class MetricsService:
         
         # If filtering by contributor, get their github_id
         target_github_id = None
+        target_login = None
         if contributor_login:
+            # First check Contributor records
             for c in contributors_list:
                 if c.login == contributor_login:
                     target_github_id = c.github_id
+                    target_login = contributor_login
                     break
+            
+            # If not found in Contributor records, check ExternalContributor
+            if target_github_id is None:
+                ext_contrib = ExternalContributor.query.filter_by(
+                    github_login=contributor_login,
+                    is_active=True
+                ).first()
+                if ext_contrib and ext_contrib.github_user_id:
+                    target_github_id = ext_contrib.github_user_id
+                    target_login = contributor_login
+                elif ext_contrib:
+                    # If ExternalContributor exists but no github_id, use login for filtering
+                    target_login = contributor_login
         
         # Aggregate by date
         daily_data = defaultdict(lambda: {"total": 0, "internal": 0, "external": 0})
@@ -1010,8 +1044,11 @@ class MetricsService:
         )
         
         # If filtering by contributor, only show their external commits
-        if contributor_login:
-            external_commits_query = external_commits_query.filter_by(github_user_login=contributor_login)
+        if contributor_login or target_login:
+            filter_login = contributor_login or target_login
+            external_commits_query = external_commits_query.filter_by(github_user_login=filter_login)
+        elif target_github_id is not None:
+            external_commits_query = external_commits_query.filter_by(github_user_id=target_github_id)
         # When all contributors are selected, show external commits from all contributors
         # (sync_external_commits tracks for all contributors to tracked repos, not just team members)
         
@@ -1067,17 +1104,27 @@ class MetricsService:
             if not repo_full_name:
                 continue
             
-            # Determine if internal
-            is_internal = MetricsService._is_internal_contributor(
-                contributor.login, repo_full_name, team_logins, internal_orgs_config
-            )
+            # Check if this user is explicitly marked as external contributor
+            is_external_contributor = ExternalContributor.query.filter_by(
+                github_login=contributor.login,
+                is_active=True
+            ).first() is not None
+            
+            # If explicitly marked as external contributor, always mark as external
+            if is_external_contributor:
+                is_internal = False
+            else:
+                # Otherwise, use normal internal/external logic
+                is_internal = MetricsService._is_internal_contributor(
+                    contributor.login, repo_full_name, team_logins, internal_orgs_config
+                )
             
             if is_internal:
                 repo_breakdown[repo_full_name]["internal"] += stat.commits_count
             else:
                 repo_breakdown[repo_full_name]["external"] += stat.commits_count
         
-        # Build repository contribution list (internal repos only)
+        # Build repository contribution list (both internal and external repos from tracked repos)
         repo_contributions = []
         
         for repo_name, counts in sorted(repo_breakdown.items()):
@@ -1087,13 +1134,20 @@ class MetricsService:
                     "value": counts["internal"],
                     "type": "internal"
                 })
+            if counts["external"] > 0:
+                repo_contributions.append({
+                    "name": repo_name,
+                    "value": counts["external"],
+                    "type": "external"
+                })
         
-        # Group external commits by repository
+        # Group external commits by repository (from ExternalCommit table - non-tracked repos)
         external_repo_breakdown = defaultdict(int)
         for ext_commit in external_commits_list:
             external_repo_breakdown[ext_commit.repo_full_name] += 1
         
-        # Add external repos to contributions
+        # Add external repos to contributions (only if filtering by contributor, show their external repos)
+        # If not filtering, show all external repos
         for repo_name, count in sorted(external_repo_breakdown.items(), key=lambda x: x[1], reverse=True):
             repo_contributions.append({
                 "name": repo_name,
