@@ -222,20 +222,30 @@ class MetricsService:
                 user_stats[github_id]["is_internal"] = True
         
         # Now sum up totals from the aggregated user stats
-        total_commits = sum(u["commits"] for u in user_stats.values())
+        total_commits_from_tracked = sum(u["commits"] for u in user_stats.values())
         total_prs_opened = sum(u["prs_opened"] for u in user_stats.values())
         total_prs_merged = sum(u["prs_merged"] for u in user_stats.values())
         total_issues_closed = sum(u["issues_closed"] for u in user_stats.values())
         
+        # Internal commits = commits by internal contributors to tracked repos
         internal_commits = sum(u["commits"] for u in user_stats.values() if u["is_internal"])
         
-        # Get external commits from ExternalCommit table (commits by team members to non-tracked repos)
+        # External commits to tracked repos = commits by external contributors to tracked repos
+        external_commits_to_tracked = sum(u["commits"] for u in user_stats.values() if not u["is_internal"])
+        
+        # Get external commits from ExternalCommit table (commits to non-tracked repos)
         external_commit_count = ExternalCommit.query.filter(
             ExternalCommit.commit_date >= since,
             ExternalCommit.commit_date <= until
         ).count()
         
-        external_commits = external_commit_count
+        external_commits_to_non_tracked = external_commit_count
+        
+        # Total external commits = external commits to tracked repos + external commits to non-tracked repos
+        external_commits = external_commits_to_tracked + external_commits_to_non_tracked
+        
+        # Total commits = internal commits + all external commits
+        total_commits = internal_commits + external_commits
         
         # Calculate average trend using least squares regression
         weights = MetricsService.get_weights()
@@ -273,10 +283,14 @@ class MetricsService:
         # Calculate trendline slope
         average_trend = MetricsService._calculate_trendline_slope(daily_scores)
         
-        # Calculate percentages
-        # https://github.com/SimonSaysGiveMeSmile
-        internal_pct = (internal_commits / total_commits * 100) if total_commits > 0 else 0
-        external_pct = (external_commits / total_commits * 100) if total_commits > 0 else 0
+        # Calculate percentages - they will naturally add up to 100% since total_commits = internal_commits + external_commits
+        # Total commits now includes both tracked repo commits and external commits
+        if total_commits > 0:
+            internal_pct = (internal_commits / total_commits * 100)
+            external_pct = (external_commits / total_commits * 100)
+        else:
+            internal_pct = 0
+            external_pct = 0
         
         return {
             "total_commits": total_commits,
@@ -653,6 +667,28 @@ class MetricsService:
             else:
                 daily_data[date_str]["external"] += stat.commits_count
         
+        # Get external commits from ExternalCommit table (needed for both split and contributions)
+        external_commits_query = ExternalCommit.query.filter(
+            ExternalCommit.commit_date >= since,
+            ExternalCommit.commit_date <= until
+        )
+        
+        # If filtering by contributor, only show their external commits
+        if contributor_login:
+            external_commits_query = external_commits_query.filter_by(github_user_login=contributor_login)
+        # When all contributors are selected, show external commits from all contributors
+        # (sync_external_commits tracks for all contributors to tracked repos, not just team members)
+        
+        external_commits_list = external_commits_query.all()
+        external_commits_count = len(external_commits_list)
+        
+        # Add external commits to daily_data by date
+        for ext_commit in external_commits_list:
+            # Format date as YYYY-MM-DD
+            date_str = ext_commit.commit_date.strftime("%Y-%m-%d")
+            daily_data[date_str]["total"] += 1
+            daily_data[date_str]["external"] += 1
+        
         # Convert to sorted list
         daily_commits = [
             {
@@ -665,6 +701,9 @@ class MetricsService:
         ]
         
         # Calculate overall internal/external split
+        # Include external commits from tracked repos (by external contributors) 
+        # AND external commits from ExternalCommit table (to non-tracked repos)
+        # Note: external commits from ExternalCommit are now included in daily_commits
         total_internal = sum(d["internal"] for d in daily_commits)
         total_external = sum(d["external"] for d in daily_commits)
         
@@ -710,25 +749,6 @@ class MetricsService:
                     "value": counts["internal"],
                     "type": "internal"
                 })
-        
-        # Get external commits from ExternalCommit table
-        external_commits_query = ExternalCommit.query.filter(
-            ExternalCommit.commit_date >= since,
-            ExternalCommit.commit_date <= until
-        )
-        
-        # If filtering by contributor, only show their external commits
-        if contributor_login:
-            external_commits_query = external_commits_query.filter_by(github_user_login=contributor_login)
-        else:
-            # Only show external commits from team members
-            team_logins = {tm.github_login for tm in TeamMember.query.filter_by(is_active=True).all()}
-            if team_logins:
-                external_commits_query = external_commits_query.filter(
-                    ExternalCommit.github_user_login.in_(team_logins)
-                )
-        
-        external_commits_list = external_commits_query.all()
         
         # Group external commits by repository
         external_repo_breakdown = defaultdict(int)

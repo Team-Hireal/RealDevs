@@ -142,6 +142,13 @@ export default function DashboardPage() {
   const topContributor = dashboardData?.contributors
     ?.sort((a, b) => b.average_trend - a.average_trend)[0];
 
+  const top3Contributors = useMemo(() => {
+    if (!dashboardData?.contributors) return [];
+    return [...dashboardData.contributors]
+      .sort((a, b) => b.commits - a.commits)
+      .slice(0, 4);
+  }, [dashboardData?.contributors]);
+
   const selectedContributorData = useMemo((): Contributor | null => {
     if (!selectedContributor || !dashboardData?.contributors) return null;
     const contributor = dashboardData.contributors.find(c => c.login === selectedContributor);
@@ -261,9 +268,15 @@ export default function DashboardPage() {
 
     const commits = dailyCommitsData.daily_commits;
     
-    // Create a map of existing dates
+    // Create maps of existing dates for commits, internal, and external
     const commitMap = new Map(
       commits.map(c => [c.date, c.commits])
+    );
+    const internalMap = new Map(
+      commits.map(c => [c.date, c.internal || 0])
+    );
+    const externalMap = new Map(
+      commits.map(c => [c.date, c.external || 0])
     );
 
     // Determine the date range
@@ -284,20 +297,30 @@ export default function DashboardPage() {
     }
 
     // Fill in all dates in the range
-    const filledData: Array<{ date: string; commits: number }> = [];
+    const filledData: Array<{ date: string; commits: number; internal: number; external: number }> = [];
     const currentDate = new Date(startDate);
     
     while (currentDate <= endDate) {
       const dateStr = currentDate.toISOString().split('T')[0];
       filledData.push({
         date: dateStr,
-        commits: commitMap.get(dateStr) || 0
+        commits: commitMap.get(dateStr) || 0,
+        internal: internalMap.get(dateStr) || 0,
+        external: externalMap.get(dateStr) || 0
       });
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
     return filledData;
   }, [dailyCommitsData, rangeDays]);
+
+  // Check if selected contributor has commits in the selected time period
+  const hasSelectedContributorCommits = useMemo(() => {
+    if (!selectedContributor) return true; // Show top contributors if none selected
+    if (!processedDailyCommits || processedDailyCommits.length === 0) return false;
+    // Check if there are any commits greater than 0
+    return processedDailyCommits.some(day => day.commits > 0);
+  }, [selectedContributor, processedDailyCommits]);
 
   // Prepare pie chart data for contribution split
   const pieChartData = useMemo(() => {
@@ -317,8 +340,14 @@ export default function DashboardPage() {
     const internalRepos = dailyCommitsData.repo_contributions.filter(r => r.type === 'internal');
     const externalRepos = dailyCommitsData.repo_contributions.filter(r => r.type === 'external');
     
-    // Aggregate external repos into a single "External" entry
-    const totalExternalCommits = externalRepos.reduce((sum, repo) => sum + repo.value, 0);
+    // Get total external commits from repo_contributions
+    const externalCommitsFromRepos = externalRepos.reduce((sum, repo) => sum + repo.value, 0);
+    
+    // Also check internal_external_split to get the complete external commit count
+    // This includes external commits to tracked repos that aren't in repo_contributions
+    const internalExternalSplit = dailyCommitsData?.internal_external_split || [];
+    const externalData = internalExternalSplit.find(s => s.category === "External");
+    const totalExternalCommits = externalData?.count || externalCommitsFromRepos;
     
     // Get accent color HSL values
     const baseHsl = getAccentColorHsl();
@@ -354,6 +383,7 @@ export default function DashboardPage() {
     });
     
     // Add aggregated External entry with grey color
+    // Always include External category if there are any external commits
     const result = [...coloredInternal];
     if (totalExternalCommits > 0) {
       result.push({
@@ -372,7 +402,7 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
+      <div className="flex h-screen bg-background">
         <Navigation />
         <main className="flex-1 p-8 overflow-auto">
           <div className="max-w-7xl mx-auto">
@@ -391,7 +421,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background">
       <Navigation />
       
       <main className="flex-1 p-8 overflow-auto">
@@ -401,7 +431,7 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-4xl font-bold accent-text mb-2">Dashboard</h1>
               <p className="text-muted-foreground">
-                Team momentum and productivity overview
+                Your Team's Productivity at a Glance
               </p>
             </div>
 
@@ -468,9 +498,9 @@ export default function DashboardPage() {
           {/* 4 Key Metric Cards */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
             {/* Total Code Commitment Trend */}
-            <Card className="glass-card flex flex-col h-full">
+            <Card className="glass-card flex flex-col h-full w-full">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-base font-medium text-white">
                   {selectedContributor ? `${selectedContributor}'s Commits` : "Total Code Commitment"}
                 </CardTitle>
               </CardHeader>
@@ -478,7 +508,7 @@ export default function DashboardPage() {
                 <div className="text-3xl font-bold accent-text mb-1">
                   {displayMetrics.totalCommits}
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">Commits</p>
+                <p className="text-sm text-white mb-3">Commits</p>
                 {processedDailyCommits && processedDailyCommits.length > 0 ? (
                   <div className="flex-1 min-h-[120px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -522,7 +552,7 @@ export default function DashboardPage() {
                   <span className={getTrendIconColor(displayMetrics.averageTrend)}>
                     {getTrendIcon(displayMetrics.averageTrend)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-white">
                     Average Trend: {formatAverageTrend(displayMetrics.averageTrend)}
                   </span>
                 </div>
@@ -530,9 +560,9 @@ export default function DashboardPage() {
             </Card>
 
             {/* Internal vs External Split */}
-            <Card className="glass-card flex flex-col h-full">
+            <Card className="glass-card flex flex-col w-full">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-base font-medium text-white">
                   {selectedContributor ? "Contributor Type" : "Contribution Split"}
                 </CardTitle>
               </CardHeader>
@@ -588,13 +618,13 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Internal</span>
+                    <span className="text-base text-white">Internal</span>
                     <span className="text-lg font-bold accent-text">
                       {displayMetrics.internalPercentage.toFixed(0)}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">External</span>
+                    <span className="text-base text-white">External</span>
                     <span className="text-lg font-bold">
                       {displayMetrics.externalPercentage.toFixed(0)}%
                     </span>
@@ -604,20 +634,20 @@ export default function DashboardPage() {
             </Card>
 
             {/* Top Contributor / Selected Contributor */}
-            <Card className="glass-card flex flex-col h-full">
+            <Card className="glass-card flex flex-col h-full w-full">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {selectedContributor ? "Selected Contributor" : "Top Contributor"}
+                <CardTitle className="text-base font-medium text-white">
+                  {selectedContributor ? "Selected Contributor" : "Top Contributors"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1">
-                {(selectedContributorData || topContributor) ? (
+                {selectedContributorData && hasSelectedContributorCommits ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      {(selectedContributorData || topContributor)?.avatar_url ? (
+                      {selectedContributorData?.avatar_url ? (
                         <img 
-                          src={(selectedContributorData || topContributor)!.avatar_url} 
-                          alt={(selectedContributorData || topContributor)!.login}
+                          src={selectedContributorData.avatar_url} 
+                          alt={selectedContributorData.login}
                           className="w-8 h-8 rounded-full"
                         />
                       ) : (
@@ -626,21 +656,66 @@ export default function DashboardPage() {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold truncate">{(selectedContributorData || topContributor)!.login}</div>
+                        <div className="font-semibold truncate">{selectedContributorData.login}</div>
                         <div className="text-xs text-muted-foreground">
-                          {(selectedContributorData || topContributor)!.is_internal ? "Internal" : "External"}
+                          {selectedContributorData.is_internal ? "Internal" : "External"}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={getTrendIconColor((selectedContributorData || topContributor)?.average_trend)}>
-                        {getTrendIcon((selectedContributorData || topContributor)?.average_trend, "w-5 h-5")}
+                      <span className={getTrendIconColor(selectedContributorData?.average_trend)}>
+                        {getTrendIcon(selectedContributorData?.average_trend, "w-5 h-5")}
                       </span>
                       <div className="text-lg font-bold accent-text">
-                        {formatAverageTrend((selectedContributorData || topContributor)?.average_trend)}
+                        {formatAverageTrend(selectedContributorData?.average_trend)}
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground">Average Trend</p>
+                  </div>
+                ) : selectedContributorData && !hasSelectedContributorCommits ? (
+                  null
+                ) : !selectedContributorData && top3Contributors.length > 0 ? (
+                  <div className="space-y-3">
+                    {top3Contributors.map((contributor, index) => (
+                      <div key={contributor.login} className="space-y-1">
+                        {/* Row 1: Avatar, Name, Type, Trend */}
+                        <div className="flex items-center gap-2">
+                          {contributor.avatar_url ? (
+                            <img 
+                              src={contributor.avatar_url} 
+                              alt={contributor.login}
+                              className="w-6 h-6 rounded-full"
+                            />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center">
+                              <Users className="w-3 h-3" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-sm truncate">{contributor.login}</div>
+                          </div>
+                          <Badge 
+                            variant={contributor.is_internal ? "default" : "secondary"} 
+                            className="text-xs px-1.5 py-0"
+                          >
+                            {contributor.is_internal ? "Internal" : "External"}
+                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <span className={getTrendIconColor(contributor?.average_trend)}>
+                              {getTrendIcon(contributor?.average_trend, "w-4 h-4")}
+                            </span>
+                            <span className="text-sm font-bold text-white">
+                              {formatAverageTrend(contributor?.average_trend)}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Row 2: Total Contribution */}
+                        <div className="flex items-center gap-2 pl-8">
+                          <span className="text-xs text-muted-foreground">Total Contribution:</span>
+                          <span className="text-sm font-semibold text-white">{contributor.commits} commits</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="text-muted-foreground text-sm">No contributors yet</div>
@@ -649,19 +724,18 @@ export default function DashboardPage() {
             </Card>
 
             {/* Risk Flags Counter */}
-            <Card className="glass-card flex flex-col h-full">
+            <Card className="glass-card flex flex-col h-full w-full min-w-0">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-base font-medium text-white">
                   {selectedContributor ? `${selectedContributor}'s Risk Flags` : "Risk Flags"}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex-1">
-                <div className="text-3xl font-bold accent-text mb-1">
+              <CardContent className="flex-1 flex flex-col">
+                {/* Total and badges on same row */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-3xl font-bold accent-text">
                   {displayRiskFlags.length}
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  {selectedContributor ? "Personal alerts" : "Active alerts"}
-                </p>
                 <div className="flex gap-1 flex-wrap">
                   {displayRiskFlags.filter(f => f.severity === "high").length > 0 && (
                     <Badge variant="destructive" className="text-xs">
@@ -682,6 +756,64 @@ export default function DashboardPage() {
                     <span className="text-xs text-muted-foreground">No flags</span>
                   )}
                 </div>
+                </div>
+                {/* Two previews for risks */}
+                {displayRiskFlags.length > 0 && (
+                  <div className="space-y-1.5 flex-1 flex flex-col justify-end">
+                    {/* Preview 1: High priority (if exists) */}
+                    {riskFlagsBySeverity.high.length > 0 && (
+                      <div className="p-1.5 rounded-lg border border-red-500/30 bg-red-500/10">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Badge variant="destructive" className="text-xs px-1.5 py-0">High</Badge>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {getSelectedFlag('high')?.title}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {getSelectedFlag('high')?.description}
+                        </p>
+                      </div>
+                    )}
+                    {/* Preview 2: Medium (if High exists) or Medium (if no High) or Low (if High+Medium don't exist) */}
+                    {riskFlagsBySeverity.high.length > 0 && riskFlagsBySeverity.medium.length > 0 ? (
+                      <div className="p-1.5 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Badge variant="default" className="text-xs px-1.5 py-0">Medium</Badge>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {getSelectedFlag('medium')?.title}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {getSelectedFlag('medium')?.description}
+                        </p>
+                      </div>
+                    ) : riskFlagsBySeverity.high.length > 0 && riskFlagsBySeverity.low.length > 0 ? (
+                      <div className="p-1.5 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0">Low</Badge>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {getSelectedFlag('low')?.title}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {getSelectedFlag('low')?.description}
+                        </p>
+                      </div>
+                    ) : riskFlagsBySeverity.medium.length > 0 ? (
+                      <div className="p-1.5 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Badge variant="default" className="text-xs px-1.5 py-0">Medium</Badge>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {getSelectedFlag('medium')?.title}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {getSelectedFlag('medium')?.description}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -734,7 +866,20 @@ export default function DashboardPage() {
                         labelStyle={{ color: 'hsl(var(--foreground))' }}
                       />
                       <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
-                      <Bar dataKey="commits" fill="hsl(var(--primary))" name="Commits" radius={[4, 4, 0, 0]} />
+                      <Bar 
+                        dataKey="internal" 
+                        fill={`hsl(${getAccentColorHsl()})`} 
+                        name="Internal" 
+                        stackId="commits"
+                        radius={[0, 0, 4, 4]}
+                      />
+                      <Bar 
+                        dataKey="external" 
+                        fill="hsl(0 0% 50%)" 
+                        name="External" 
+                        stackId="commits"
+                        radius={[4, 4, 0, 0]}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (

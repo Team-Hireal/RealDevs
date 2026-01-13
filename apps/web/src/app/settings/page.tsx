@@ -218,7 +218,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background">
       <Navigation />
       
       <main className="flex-1 p-8 overflow-auto">

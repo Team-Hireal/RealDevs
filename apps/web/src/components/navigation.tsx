@@ -16,7 +16,7 @@ export function Navigation() {
   const pathname = usePathname();
 
   return (
-    <nav className="glass-card w-64 min-h-screen p-6 flex flex-col">
+    <nav className="glass-card w-64 h-screen p-6 flex flex-col">
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
           <img 
@@ -28,7 +28,7 @@ export function Navigation() {
           />
           <h1 className="text-2xl font-bold accent-text">RealDevs</h1>
         </div>
-        <p className="text-xs text-muted-foreground">Team Producitivity at a Glance</p>
+        
       </div>
 
       <div className="flex-1 space-y-2">
