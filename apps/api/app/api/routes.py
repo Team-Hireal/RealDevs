@@ -119,9 +119,9 @@ def sync_repos():
     try:
         data = request.get_json() or {}
         range_days_param = data.get('range_days', 7)
-        # Handle "all" for all-time sync (use a large number like 3650 days ~10 years)
-        if range_days_param == 'all':
-            range_days = 3650  # ~10 years, effectively all time
+        # Handle "all" for all-time sync (pass None to sync from GitHub's launch date)
+        if range_days_param == 'all' or range_days_param is None:
+            range_days = None  # None means all time
         else:
             range_days = int(range_days_param)
         

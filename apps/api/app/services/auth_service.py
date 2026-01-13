@@ -119,8 +119,8 @@ class AuthService:
         # Clear memory store
         _memory_token_store.clear()
         
-        # Clear database
-        from app.models import Repository, Contributor, DailyStats, TeamMember, Settings
+        # Clear database - include all models
+        from app.models import Repository, Contributor, DailyStats, TeamMember, Settings, ExternalCommit
         
         AuthToken.query.delete()
         DailyStats.query.delete()
@@ -128,6 +128,7 @@ class AuthService:
         Repository.query.delete()
         TeamMember.query.delete()
         Settings.query.delete()
+        ExternalCommit.query.delete()
         
         db.session.commit()
         logger.info("All data cleared")

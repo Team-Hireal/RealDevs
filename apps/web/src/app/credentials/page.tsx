@@ -76,11 +76,99 @@ export default function CredentialsPage() {
     },
   });
 
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+  const [autoSyncStatus, setAutoSyncStatus] = useState<string>("");
+
+  const syncMutation = useMutation({
+    mutationFn: (rangeDays: number | null) => api.syncRepos(rangeDays),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["selected-repos"] });
+      // Don't clear status here - let the parent handler manage it with delay
+    },
+    onError: (error) => {
+      setIsAutoSyncing(false);
+      setAutoSyncStatus(`Sync failed: ${error.message}`);
+    },
+  });
+
   const patMutation = useMutation({
     mutationFn: (data: { pat: string }) => api.submitPat(data.pat),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["auth-status"] });
       setPat("");
+      
+      // Wait a bit for auth status to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setIsAutoSyncing(true);
+      
+      // Check if repos are selected
+      const selectedReposData = await queryClient.fetchQuery({
+        queryKey: ["selected-repos"],
+        queryFn: () => api.getSelectedRepos(),
+      });
+      
+      // If no repos selected, auto-select all available repos
+      if (!selectedReposData?.repos || selectedReposData.repos.length === 0) {
+        setAutoSyncStatus("Selecting all available repositories...");
+        
+        try {
+          // Fetch available repos
+          const availableReposData = await queryClient.fetchQuery({
+            queryKey: ["available-repos"],
+            queryFn: () => api.listRepos(),
+          });
+          
+          if (availableReposData?.repos && availableReposData.repos.length > 0) {
+            // Select all repos
+            await api.selectRepos(availableReposData.repos.map(r => r.full_name));
+            queryClient.invalidateQueries({ queryKey: ["selected-repos"] });
+            setAutoSyncStatus(`Selected ${availableReposData.repos.length} repositories. Starting sync...`);
+            
+            // Wait a bit for repos to be saved
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } else {
+            setAutoSyncStatus("No repositories found. Please check your PAT permissions.");
+            setIsAutoSyncing(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Error auto-selecting repos:", error);
+          setAutoSyncStatus("Failed to auto-select repositories. Please select them manually.");
+          setIsAutoSyncing(false);
+          return;
+        }
+      } else {
+        setAutoSyncStatus("Starting sync for all commits and team members...");
+      }
+      
+      // Always trigger sync for "all time" (null = all time) after PAT setup
+      setAutoSyncStatus("Syncing all commits and team members (this may take a while)...");
+      
+      try {
+        await syncMutation.mutateAsync(null); // null = all time
+        setAutoSyncStatus("Initial sync completed successfully!");
+      } catch (error: any) {
+        setAutoSyncStatus(`Sync failed: ${error.message || "Unknown error"}`);
+      } finally {
+        // Keep status visible for a few seconds, then clear
+        setTimeout(() => {
+          setIsAutoSyncing(false);
+          setAutoSyncStatus("");
+        }, 5000);
+      }
+    },
+    onError: (error: any) => {
+      // Provide helpful error message
+      const errorMessage = error.message || "Failed to validate PAT";
+      if (errorMessage.includes("401") || errorMessage.includes("Bad credentials")) {
+        setAutoSyncStatus("Invalid PAT. Please check your token and try again.");
+      } else if (errorMessage.includes("403") || errorMessage.includes("Forbidden")) {
+        setAutoSyncStatus("PAT lacks required permissions. Please create a new token with read-only access.");
+      } else {
+        setAutoSyncStatus(`PAT validation failed: ${errorMessage}`);
+      }
     },
   });
 
@@ -148,6 +236,17 @@ export default function CredentialsPage() {
     setSelectedRepoFullNames(updated);
   };
 
+  const handleSelectAllRepos = () => {
+    if (availableRepos?.repos) {
+      const allRepoNames = new Set(availableRepos.repos.map(r => r.full_name));
+      setSelectedRepoFullNames(allRepoNames);
+    }
+  };
+
+  const handleDeselectAllRepos = () => {
+    setSelectedRepoFullNames(new Set());
+  };
+
   const handleSaveRepos = () => {
     selectReposMutation.mutate(Array.from(selectedRepoFullNames));
   };
@@ -174,6 +273,20 @@ export default function CredentialsPage() {
     } else {
       updated.push(repoFullName);
     }
+    setInternalRepos(updated);
+  };
+
+  const handleSelectAllOrgRepos = (org: string) => {
+    const orgRepos = reposByOrg[org] || [];
+    const orgRepoFullNames = orgRepos.map(r => r.full_name);
+    const updated = [...new Set([...internalRepos, ...orgRepoFullNames])];
+    setInternalRepos(updated);
+  };
+
+  const handleDeselectAllOrgRepos = (org: string) => {
+    const orgRepos = reposByOrg[org] || [];
+    const orgRepoFullNames = new Set(orgRepos.map(r => r.full_name));
+    const updated = internalRepos.filter(r => !orgRepoFullNames.has(r));
     setInternalRepos(updated);
   };
 
@@ -249,7 +362,32 @@ export default function CredentialsPage() {
 
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-semibold mb-3">Repository Selection</h4>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold">Repository Selection</h4>
+                        {availableRepos && availableRepos.repos.length > 0 && (
+                          <div className="flex gap-2">
+                            {selectedRepoFullNames.size < availableRepos.repos.length ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleSelectAllRepos}
+                                className="text-xs"
+                              >
+                                Select All ({availableRepos.repos.length})
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleDeselectAllRepos}
+                                className="text-xs"
+                              >
+                                Deselect All
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       {availableRepos ? (
                         <div className="space-y-3">
                           <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3">
@@ -364,7 +502,7 @@ export default function CredentialsPage() {
                     <div className="text-sm">
                       <div className="font-semibold accent-text">PAT Not Configured</div>
                       <div className="text-muted-foreground">
-                        Create a fine-grained PAT with read-only permissions
+                        Create a fine-grained PAT with read-only permissions. Once configured, we'll automatically sync all your repositories and team members.
                       </div>
                     </div>
                   </div>
@@ -401,6 +539,25 @@ export default function CredentialsPage() {
                       <p className="text-sm text-destructive mt-2">
                         Failed to validate PAT. Please check and try again.
                       </p>
+                    )}
+                    {(isAutoSyncing || autoSyncStatus) && (
+                      <div className="mt-4 p-4 rounded-lg accent-bg accent-border border">
+                        <div className="flex items-center gap-3">
+                          {isAutoSyncing ? (
+                            <Loader2 className="w-5 h-5 accent-text animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-5 h-5 accent-text" />
+                          )}
+                          <div className="flex-1">
+                            <div className="font-semibold accent-text">
+                              {isAutoSyncing ? "Setting up..." : "Setup Complete"}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-1">
+                              {autoSyncStatus || "Initializing automatic sync..."}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -486,6 +643,32 @@ export default function CredentialsPage() {
                               {/* Collapsible repo selection */}
                               {isExpanded && orgRepos.length > 0 && (
                                 <div className="ml-6 pl-4 border-l-2 border-secondary space-y-1">
+                                  <div className="flex items-center justify-between mb-2 pb-2 border-b border-secondary">
+                                    <span className="text-xs text-muted-foreground">
+                                      {orgRepos.filter(r => internalRepos.includes(r.full_name)).length} of {orgRepos.length} selected
+                                    </span>
+                                    <div className="flex gap-1">
+                                      {orgRepos.filter(r => internalRepos.includes(r.full_name)).length < orgRepos.length ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleSelectAllOrgRepos(org)}
+                                          className="text-xs h-6 px-2"
+                                        >
+                                          Select All
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleDeselectAllOrgRepos(org)}
+                                          className="text-xs h-6 px-2"
+                                        >
+                                          Deselect All
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
                                   {orgRepos.map((repo) => {
                                     const isRepoInternal = internalRepos.includes(repo.full_name);
                                     

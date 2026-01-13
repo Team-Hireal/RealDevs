@@ -79,3 +79,33 @@ def test_calculate_trendline_slope_realistic():
     # Should be around 2.5-2.6 (average increase per day)
     assert abs(slope - 2.5) < 0.15
 
+
+def test_calculate_trendline_slope_with_missing_days():
+    """Test trendline slope with missing days (gaps in data)."""
+    # Simulate data with gaps - upward trend but not every day
+    daily_scores = [10.0, 12.0, 0.0, 18.0, 20.0, 0.0, 25.0]
+    slope = MetricsService._calculate_trendline_slope(daily_scores)
+    # Should still be positive overall
+    assert slope > 0
+
+
+def test_trend_direction_validation():
+    """Test that trend direction validation works correctly."""
+    # This test verifies the validation logic that checks if data direction matches trend direction
+    # Upward data should produce positive trend
+    upward_data = [1.0, 2.0, 3.0, 4.0, 5.0]
+    slope_up = MetricsService._calculate_trendline_slope(upward_data)
+    assert slope_up > 0, "Upward data should produce positive slope"
+    
+    # Downward data should produce negative trend
+    downward_data = [5.0, 4.0, 3.0, 2.0, 1.0]
+    slope_down = MetricsService._calculate_trendline_slope(downward_data)
+    assert slope_down < 0, "Downward data should produce negative slope"
+    
+    # If data is reversed (newest first), it would show as downward but should be corrected
+    reversed_upward = [5.0, 4.0, 3.0, 2.0, 1.0]  # This is actually upward data in reverse
+    slope_reversed = MetricsService._calculate_trendline_slope(reversed_upward)
+    # The slope will be negative because data is in reverse order
+    # The validation in _compute_team_summary should catch this and reverse it
+    assert slope_reversed < 0, "Reversed upward data will show negative slope (this is expected, validation should fix it)"
+

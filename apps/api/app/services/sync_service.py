@@ -110,8 +110,12 @@ class SyncService:
         }
     
     @staticmethod
-    def sync_repos(range_days: int = 7) -> Dict:
-        """Sync data for all selected repos."""
+    def sync_repos(range_days: Optional[int] = 7) -> Dict:
+        """Sync data for all selected repos.
+        
+        Args:
+            range_days: Number of days to sync. If None, syncs all time (from 2008-01-01, GitHub's launch).
+        """
         pat = AuthService.get_stored_pat()
         if not pat:
             raise ValueError("No PAT stored")
@@ -130,7 +134,12 @@ class SyncService:
             }
         
         until = datetime.now(timezone.utc)
-        since = until - timedelta(days=range_days)
+        # If range_days is None, sync from GitHub's launch date (2008-01-01)
+        if range_days is None:
+            since = datetime(2008, 1, 1, tzinfo=timezone.utc)
+            logger.info("Syncing all time (from 2008-01-01)")
+        else:
+            since = until - timedelta(days=range_days)
         
         synced_repos = []
         failed_repos = []
@@ -530,7 +539,7 @@ class SyncService:
                     db.session.add(stat)
     
     @staticmethod
-    def sync_external_commits(range_days: int = 7) -> Dict:
+    def sync_external_commits(range_days: Optional[int] = 7) -> Dict:
         """Sync external commits (commits by contributors to non-tracked repos).
         
         This function tracks ALL contributors to tracked repositories and fetches
@@ -572,7 +581,12 @@ class SyncService:
         tracked_repo_names = {repo.full_name for repo in tracked_repos}
         
         until = datetime.now(timezone.utc)
-        since = until - timedelta(days=range_days)
+        # If range_days is None, sync from GitHub's launch date (2008-01-01)
+        if range_days is None:
+            since = datetime(2008, 1, 1, tzinfo=timezone.utc)
+            logger.info("Syncing external commits for all time (from 2008-01-01)")
+        else:
+            since = until - timedelta(days=range_days)
         
         total_external_commits = 0
         synced_members = []

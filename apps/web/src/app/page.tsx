@@ -53,8 +53,7 @@ export default function DashboardPage() {
   const [selectedMediumFlag, setSelectedMediumFlag] = useState<string | null>(null);
   const [selectedLowFlag, setSelectedLowFlag] = useState<string | null>(null);
   const [isCustomDateOpen, setIsCustomDateOpen] = useState(false);
-  const [customStartDate, setCustomStartDate] = useState<string>("");
-  const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [customDaysInput, setCustomDaysInput] = useState<string>("");
   const [isCustomRange, setIsCustomRange] = useState(false);
   const customDatePopupRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -95,22 +94,27 @@ export default function DashboardPage() {
   };
 
   const handleCustomDateRange = () => {
-    if (customStartDate && customEndDate) {
-      const start = new Date(customStartDate);
-      const end = new Date(customEndDate);
-      const diffTime = Math.abs(end.getTime() - start.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end days
-      setRangeDays(diffDays);
-      setIsCustomRange(true);
-      setIsCustomDateOpen(false);
+    if (customDaysInput.trim()) {
+      // Parse input like "60d", "120d", "360d" or just "60", "120", "360"
+      const input = customDaysInput.trim().toLowerCase();
+      const match = input.match(/^(\d+)\s*d\s*$/i) || input.match(/^(\d+)$/);
+      
+      if (match) {
+        const days = parseInt(match[1], 10);
+        if (days > 0) {
+          setRangeDays(days);
+          setIsCustomRange(true);
+          setIsCustomDateOpen(false);
+          setCustomDaysInput("");
+        }
+      }
     }
   };
 
   const handlePresetRange = (days: number | null) => {
     setRangeDays(days);
     setIsCustomRange(false);
-    setCustomStartDate("");
-    setCustomEndDate("");
+    setCustomDaysInput("");
   };
 
   const getSeverityColor = (severity: string) => {
@@ -524,33 +528,34 @@ export default function DashboardPage() {
                 {isCustomDateOpen && (
                   <div 
                     ref={customDatePopupRef}
-                    className="absolute top-full right-0 mt-2 z-50 bg-[hsl(0_0%_8%)] border border-border rounded-lg shadow-lg p-4 min-w-[280px]"
+                    className="absolute top-full right-0 mt-2 z-50 glass-card border border-border rounded-lg shadow-lg p-4 min-w-[280px]"
                   >
                     <div className="space-y-3">
                       <div>
-                        <label className="text-sm text-muted-foreground mb-1 block">Start Date</label>
+                        <label className="text-sm font-medium mb-1 block accent-text">
+                          Days from Today
+                        </label>
                         <Input
-                          type="date"
-                          value={customStartDate}
-                          onChange={(e) => setCustomStartDate(e.target.value)}
-                          className="bg-background"
+                          type="text"
+                          value={customDaysInput}
+                          onChange={(e) => setCustomDaysInput(e.target.value)}
+                          placeholder="e.g., 60d, 120d, 360d"
+                          className="bg-background font-mono"
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter") {
+                              handleCustomDateRange();
+                            }
+                          }}
                         />
-                      </div>
-                      <div>
-                        <label className="text-sm text-muted-foreground mb-1 block">End Date</label>
-                        <Input
-                          type="date"
-                          value={customEndDate}
-                          onChange={(e) => setCustomEndDate(e.target.value)}
-                          className="bg-background"
-                          min={customStartDate}
-                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Enter number of days (e.g., 60d or 60)
+                        </p>
                       </div>
                       <div className="flex gap-2 pt-2">
                         <Button
                           size="sm"
                           onClick={handleCustomDateRange}
-                          disabled={!customStartDate || !customEndDate}
+                          disabled={!customDaysInput.trim()}
                           className="flex-1"
                         >
                           Apply
@@ -560,8 +565,7 @@ export default function DashboardPage() {
                           variant="outline"
                           onClick={() => {
                             setIsCustomDateOpen(false);
-                            setCustomStartDate("");
-                            setCustomEndDate("");
+                            setCustomDaysInput("");
                           }}
                         >
                           Cancel

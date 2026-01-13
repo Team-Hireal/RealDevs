@@ -18,7 +18,12 @@ export function Navigation() {
   return (
     <nav className="glass-card w-64 h-screen p-6 flex flex-col">
       <div className="mb-8">
-        <div className="flex items-center gap-2 mb-2">
+        <Link 
+          href="https://hireal.info" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 mb-2 hover:opacity-80 transition-opacity"
+        >
           <img 
             src="/logo.png" 
             alt="Hireal Logo" 
@@ -27,7 +32,7 @@ export function Navigation() {
             className="w-8 h-8 object-contain"
           />
           <h1 className="text-2xl font-bold accent-text">RealDevs</h1>
-        </div>
+        </Link>
         
       </div>
 
@@ -57,6 +62,9 @@ export function Navigation() {
       <div className="mt-auto pt-6 border-t border-border space-y-6">
         <ThemeSelector />
         
+        <div className="text-xs text-muted-foreground text-center pt-4">
+          <p>Powered by <span className="font-semibold">Hireal Inc.</span></p>
+        </div>
       </div>
       {/* https://github.com/SimonSaysGiveMeSmile */}
     </nav>
