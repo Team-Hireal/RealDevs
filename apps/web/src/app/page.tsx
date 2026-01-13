@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { 
   LayoutDashboard, 
   TrendingUp, 
@@ -51,6 +52,11 @@ export default function DashboardPage() {
   const [selectedHighFlag, setSelectedHighFlag] = useState<string | null>(null);
   const [selectedMediumFlag, setSelectedMediumFlag] = useState<string | null>(null);
   const [selectedLowFlag, setSelectedLowFlag] = useState<string | null>(null);
+  const [isCustomDateOpen, setIsCustomDateOpen] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [isCustomRange, setIsCustomRange] = useState(false);
+  const customDatePopupRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const { accentColor } = useTheme();
 
@@ -86,6 +92,25 @@ export default function DashboardPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleCustomDateRange = () => {
+    if (customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      const end = new Date(customEndDate);
+      const diffTime = Math.abs(end.getTime() - start.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end days
+      setRangeDays(diffDays);
+      setIsCustomRange(true);
+      setIsCustomDateOpen(false);
+    }
+  };
+
+  const handlePresetRange = (days: number | null) => {
+    setRangeDays(days);
+    setIsCustomRange(false);
+    setCustomStartDate("");
+    setCustomEndDate("");
   };
 
   const getSeverityColor = (severity: string) => {
@@ -244,6 +269,26 @@ export default function DashboardPage() {
     setSelectedMediumFlag(riskFlagsBySeverity.medium.length > 0 ? "0" : null);
     setSelectedLowFlag(riskFlagsBySeverity.low.length > 0 ? "0" : null);
   }, [riskFlagsBySeverity, selectedContributor]);
+
+  // Close custom date popup when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        customDatePopupRef.current &&
+        !customDatePopupRef.current.contains(event.target as Node)
+      ) {
+        setIsCustomDateOpen(false);
+      }
+    };
+
+    if (isCustomDateOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isCustomDateOpen]);
 
   // Get accent color HSL value for gradients
   const getAccentColorHsl = () => {
@@ -437,35 +482,94 @@ export default function DashboardPage() {
 
             <div className="flex items-center gap-4">
               {/* Date Range Selector */}
-              <div className="flex items-center gap-2 bg-[hsl(0_0%_8%)] rounded-lg p-1">
+              <div className="relative flex items-center gap-2 bg-[hsl(0_0%_8%)] rounded-lg p-1">
                 <Button
-                  variant={rangeDays === 7 ? "default" : "ghost"}
+                  variant={rangeDays === 7 && !isCustomRange ? "default" : "ghost"}
                   size="sm"
-                  onClick={() => setRangeDays(7)}
+                  onClick={() => handlePresetRange(7)}
                 >
                   7d
                 </Button>
                 <Button
-                  variant={rangeDays === 14 ? "default" : "ghost"}
+                  variant={rangeDays === 14 && !isCustomRange ? "default" : "ghost"}
                   size="sm"
-                  onClick={() => setRangeDays(14)}
+                  onClick={() => handlePresetRange(14)}
                 >
                   14d
                 </Button>
                 <Button
-                  variant={rangeDays === 30 ? "default" : "ghost"}
+                  variant={rangeDays === 30 && !isCustomRange ? "default" : "ghost"}
                   size="sm"
-                  onClick={() => setRangeDays(30)}
+                  onClick={() => handlePresetRange(30)}
                 >
                   30d
                 </Button>
                 <Button
-                  variant={rangeDays === null ? "default" : "ghost"}
+                  variant={rangeDays === null && !isCustomRange ? "default" : "ghost"}
                   size="sm"
-                  onClick={() => setRangeDays(null)}
+                  onClick={() => handlePresetRange(null)}
                 >
                   All
                 </Button>
+                <Button
+                  variant={isCustomRange ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setIsCustomDateOpen(!isCustomDateOpen)}
+                >
+                  <Calendar className="w-4 h-4 mr-1" />
+                  Custom
+                </Button>
+                
+                {/* Custom Date Range Popup */}
+                {isCustomDateOpen && (
+                  <div 
+                    ref={customDatePopupRef}
+                    className="absolute top-full right-0 mt-2 z-50 bg-[hsl(0_0%_8%)] border border-border rounded-lg shadow-lg p-4 min-w-[280px]"
+                  >
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-1 block">Start Date</label>
+                        <Input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="bg-background"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-1 block">End Date</label>
+                        <Input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="bg-background"
+                          min={customStartDate}
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={handleCustomDateRange}
+                          disabled={!customStartDate || !customEndDate}
+                          className="flex-1"
+                        >
+                          Apply
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsCustomDateOpen(false);
+                            setCustomStartDate("");
+                            setCustomEndDate("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sync Button */}

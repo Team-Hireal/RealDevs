@@ -79,8 +79,14 @@ class MetricsService:
         """
         Calculate the slope of a trendline using least squares regression.
         
+        This uses the standard least squares method (not RMS - Root Mean Square).
+        RMS is used for error measurement, not for calculating trendline slope.
+        
+        Formula: slope = (n*Σ(xy) - Σ(x)*Σ(y)) / (n*Σ(x²) - (Σ(x))²)
+        where n = number of data points, x = day index (0, 1, 2, ...), y = daily score
+        
         Args:
-            daily_scores: List of weighted scores for each day (ordered chronologically)
+            daily_scores: List of weighted scores for each day (ordered chronologically from oldest to newest)
         
         Returns:
             The slope of the trendline. Positive values indicate upward trend,
@@ -91,6 +97,7 @@ class MetricsService:
         
         n = len(daily_scores)
         # x values are day indices (0, 1, 2, ...)
+        # Day 0 is the oldest, day n-1 is the newest
         x_values = list(range(n))
         
         # Calculate sums for least squares formula
@@ -100,11 +107,21 @@ class MetricsService:
         sum_x_squared = sum(x * x for x in x_values)
         
         # Least squares slope formula: slope = (n*Σ(xy) - Σ(x)*Σ(y)) / (n*Σ(x²) - (Σ(x))²)
+        # This is the standard formula for linear regression slope
         denominator = n * sum_x_squared - sum_x * sum_x
         if denominator == 0:
+            logger.warning(f"Trend calculation denominator is zero for {n} data points")
             return 0.0
         
         slope = (n * sum_xy - sum_x * sum_y) / denominator
+        
+        # Debug logging to help identify issues
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Trend calculation: n={n}, first_score={daily_scores[0]:.2f}, "
+                f"last_score={daily_scores[-1]:.2f}, slope={slope:.4f}"
+            )
+        
         return slope
     
     @staticmethod

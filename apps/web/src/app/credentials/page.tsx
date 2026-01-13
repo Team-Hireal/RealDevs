@@ -231,7 +231,7 @@ export default function CredentialsPage() {
                 GitHub Personal Access Token
               </CardTitle>
               <CardDescription>
-                Your PAT is stored encrypted locally and never leaves your machine
+                We will not store your PAT without your permission, your PAT will be deleted after each session
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
