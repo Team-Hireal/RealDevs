@@ -47,21 +47,91 @@ const GitHubIcon = ({ className }: { className?: string }) => (
 );
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from "recharts";
 
+const DASHBOARD_STATE_KEY = "dashboard-state";
+
+interface DashboardState {
+  rangeDays: number | null;
+  selectedContributor: string | null;
+  isCustomRange: boolean;
+}
+
 export default function DashboardPage() {
-  const [rangeDays, setRangeDays] = useState<number | null>(7);
+  // Initialize state from localStorage or defaults
+  const [rangeDays, setRangeDays] = useState<number | null>(() => {
+    if (typeof window === "undefined") return 7;
+    try {
+      const saved = localStorage.getItem(DASHBOARD_STATE_KEY);
+      if (saved) {
+        const state: DashboardState = JSON.parse(saved);
+        // Explicitly preserve null for "all-time" selection
+        // Check if rangeDays exists in the state (even if null)
+        if ('rangeDays' in state) {
+          return state.rangeDays;
+        }
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+    return 7;
+  });
+  
   const [copied, setCopied] = useState(false);
-  const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
+  
+  const [selectedContributor, setSelectedContributor] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = localStorage.getItem(DASHBOARD_STATE_KEY);
+      if (saved) {
+        const state: DashboardState = JSON.parse(saved);
+        return state.selectedContributor ?? null;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+    return null;
+  });
+  
   const [selectedHighFlag, setSelectedHighFlag] = useState<string | null>(null);
   const [selectedMediumFlag, setSelectedMediumFlag] = useState<string | null>(null);
   const [selectedLowFlag, setSelectedLowFlag] = useState<string | null>(null);
   const [isCustomDateOpen, setIsCustomDateOpen] = useState(false);
   const [customDaysInput, setCustomDaysInput] = useState<string>("");
-  const [isCustomRange, setIsCustomRange] = useState(false);
+  
+  const [isCustomRange, setIsCustomRange] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const saved = localStorage.getItem(DASHBOARD_STATE_KEY);
+      if (saved) {
+        const state: DashboardState = JSON.parse(saved);
+        return state.isCustomRange ?? false;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+    return false;
+  });
+  
   const [dismissedPatPrompt, setDismissedPatPrompt] = useState(false);
   const customDatePopupRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const { accentColor } = useTheme();
   const router = useRouter();
+
+  // Save dashboard state to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const state: DashboardState = {
+        rangeDays,
+        selectedContributor,
+        isCustomRange,
+      };
+      localStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(state));
+    } catch (e) {
+      // Ignore storage errors (e.g., quota exceeded)
+      console.warn("Failed to save dashboard state to localStorage:", e);
+    }
+  }, [rangeDays, selectedContributor, isCustomRange]);
 
   const { data: authStatus } = useQuery({
     queryKey: ["auth-status"],
@@ -493,20 +563,21 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Key className="w-5 h-5" />
-                  GitHub Personal Access Token Required
+                  Welcome to RealDevs
                 </CardTitle>
                 <CardDescription>
-                  We couldn't detect a configured GitHub Personal Access Token (PAT). Configure one to unlock your team's dashboard.
+                  To unlock the full dashboard, connect a GitHub Personal Access Token (PAT).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2 text-sm text-muted-foreground">
-                  <p className="font-semibold">How to proceed:</p>
-                  <ol className="list-decimal list-inside space-y-1 ml-2">
-                    <li>Click &quot;Configure PAT&quot; to open the Credentials page.</li>
-                    <li>Follow the instructions there to create a fine-grained, read-only PAT on GitHub.</li>
-                    <li>Paste your PAT and submit it – we&apos;ll handle the initial sync automatically.</li>
-                  </ol>
+                  <p className="font-semibold">
+                    You can either:
+                  </p>
+                  <p>
+                    • **Configure a PAT now** for full analytics and automatic syncing, or<br />
+                    • **Continue without a PAT** with limited GitHub rate limits — you&apos;ll need to manually add users by GitHub username in **Settings → Credentials**.
+                  </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
                   <Button
@@ -514,7 +585,7 @@ export default function DashboardPage() {
                     className="sm:flex-1"
                     onClick={() => setDismissedPatPrompt(true)}
                   >
-                    Maybe later
+                    Continue without PAT
                   </Button>
                   <Button
                     className="sm:flex-1"
@@ -766,13 +837,33 @@ export default function DashboardPage() {
                         </Pie>
                         <Tooltip 
                           contentStyle={{ 
-                            backgroundColor: 'hsl(var(--card))', 
+                            backgroundColor: 'black', 
                             border: '1px solid hsl(var(--border))',
                             borderRadius: '8px',
-                            padding: '4px 8px'
+                            padding: '8px 12px'
                           }}
-                          labelStyle={{ color: 'hsl(var(--foreground))', fontSize: '10px' }}
-                          formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length > 0) {
+                              const value = payload[0].value as number;
+                              
+                              return (
+                                <div
+                                  style={{
+                                    backgroundColor: 'black',
+                                    color: 'white',
+                                    fontSize: '12px',
+                                    fontWeight: 'bold',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid hsl(var(--border))',
+                                  }}
+                                >
+                                  {`${value.toFixed(1)}%`}
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -1704,10 +1795,18 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {weeklyReport?.text ? (
-                  <div className="prose prose-invert max-w-none">
-                    <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans bg-[hsl(0_0%_8%)] p-4 rounded-lg">
-                      {weeklyReport.text}
-                    </pre>
+                  <div className="space-y-3 text-sm text-muted-foreground">
+                    {weeklyReport.text
+                      .trim()
+                      .split(/\n{2,}/)
+                      .map((block, index) => (
+                        <p
+                          key={index}
+                          className="whitespace-pre-wrap leading-relaxed"
+                        >
+                          {block.trim()}
+                        </p>
+                      ))}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">

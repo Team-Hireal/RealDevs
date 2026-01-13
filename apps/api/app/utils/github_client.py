@@ -10,15 +10,20 @@ logger = logging.getLogger(__name__)
 class GitHubClient:
     """Client for GitHub REST API."""
     
-    def __init__(self, pat: str, base_url: str = "https://api.github.com"):
-        """Initialize with Personal Access Token."""
+    def __init__(self, pat: Optional[str] = None, base_url: str = "https://api.github.com"):
+        """Initialize with optional Personal Access Token.
+        
+        If pat is None, client operates in unauthenticated mode (public data only).
+        """
         self.base_url = base_url
         self.headers = {
-            "Authorization": f"Bearer {pat}",
             "Accept": "application/vnd.github.v3+json",
             "X-GitHub-Api-Version": "2022-11-28"
         }
+        if pat:
+            self.headers["Authorization"] = f"Bearer {pat}"
         self.client = httpx.Client(headers=self.headers, timeout=30.0)
+        self.authenticated = pat is not None
     
     def __enter__(self):
         return self
@@ -85,26 +90,53 @@ class GitHubClient:
         response.raise_for_status()
         return response.json()
     
-    def list_repos(self, visibility: str = "all", affiliation: str = "owner,collaborator,organization_member") -> List[Dict]:
-        """List repositories accessible to the user."""
-        params = {
-            "visibility": visibility,
-            "affiliation": affiliation,
-            "sort": "updated",
-            "per_page": 100
-        }
-        return self._get_paginated(f"{self.base_url}/user/repos", params, max_pages=20)
+    def list_repos(self, username: Optional[str] = None, visibility: str = "all", affiliation: str = "owner,collaborator,organization_member") -> List[Dict]:
+        """List repositories accessible to the user.
+        
+        If authenticated: lists all repos accessible to the authenticated user.
+        If unauthenticated: lists public repos for the specified username.
+        """
+        if self.authenticated:
+            params = {
+                "visibility": visibility,
+                "affiliation": affiliation,
+                "sort": "updated",
+                "per_page": 100
+            }
+            return self._get_paginated(f"{self.base_url}/user/repos", params, max_pages=5)
+        else:
+            # Unauthenticated mode - list public repos for username
+            if not username:
+                raise ValueError("Username required for unauthenticated mode")
+            params = {
+                "sort": "updated",
+                "per_page": 100
+            }
+            return self._get_paginated(f"{self.base_url}/users/{username}/repos", params, max_pages=5)
     
-    def get_commits(self, owner: str, repo: str, since: Optional[datetime] = None, until: Optional[datetime] = None) -> List[Dict]:
-        """Get commits for a repository in a date range."""
-        params = {}
+    def get_commits(
+        self, 
+        owner: str, 
+        repo: str, 
+        since: Optional[datetime] = None, 
+        until: Optional[datetime] = None,
+        author: Optional[str] = None,
+    ) -> List[Dict]:
+        """Get commits for a repository in a date range.
+        
+        Optionally filter by author login.
+        """
+        params: Dict[str, Any] = {}
         if since:
             params['since'] = since.isoformat()
         if until:
             params['until'] = until.isoformat()
+        if author:
+            # GitHub supports filtering commits by author login
+            params['author'] = author
         
         url = f"{self.base_url}/repos/{owner}/{repo}/commits"
-        return self._get_paginated(url, params, max_pages=50)
+        return self._get_paginated(url, params, max_pages=10)
     
     def get_pull_requests(self, owner: str, repo: str, state: str = "all") -> List[Dict]:
         """Get pull requests for a repository."""
@@ -115,7 +147,7 @@ class GitHubClient:
             "per_page": 100
         }
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
-        return self._get_paginated(url, params, max_pages=20)
+        return self._get_paginated(url, params, max_pages=5)
     
     def get_issues(self, owner: str, repo: str, state: str = "closed", since: Optional[datetime] = None) -> List[Dict]:
         """Get issues for a repository (excludes PRs)."""
@@ -129,7 +161,7 @@ class GitHubClient:
             params['since'] = since.isoformat()
         
         url = f"{self.base_url}/repos/{owner}/{repo}/issues"
-        all_issues = self._get_paginated(url, params, max_pages=20)
+        all_issues = self._get_paginated(url, params, max_pages=5)
         
         # Filter out pull requests (issues with pull_request field)
         return [issue for issue in all_issues if 'pull_request' not in issue]
@@ -137,7 +169,7 @@ class GitHubClient:
     def get_contributors(self, owner: str, repo: str) -> List[Dict]:
         """Get contributors for a repository."""
         url = f"{self.base_url}/repos/{owner}/{repo}/contributors"
-        return self._get_paginated(url, max_pages=10)
+        return self._get_paginated(url, max_pages=3)
     
     def get_rate_limit(self) -> Dict:
         """Get current rate limit status."""
@@ -199,7 +231,7 @@ class GitHubClient:
             self.headers["Accept"] = "application/vnd.github.cloak-preview+json"
             self.client.headers.update(self.headers)
             
-            results = self._get_paginated(url, params, max_pages=5)  # Limit to 5 pages (500 commits) to respect rate limits
+            results = self._get_paginated(url, params, max_pages=3)  # Limit to 3 pages (300 commits) to respect rate limits
             
             # Extract items from search results
             if results and isinstance(results[0], dict) and 'items' in results[0]:

@@ -2,7 +2,7 @@
 # https://github.com/SimonSaysGiveMeSmile
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
-from app.models import db, Repository, Contributor, DailyStats, TeamMember, ExternalCommit
+from app.models import db, Repository, Contributor, DailyStats, TeamMember, ExternalCommit, ExternalContributor
 from app.utils.github_client import GitHubClient
 from app.services.auth_service import AuthService
 from collections import defaultdict
@@ -17,13 +17,19 @@ class SyncService:
     
     @staticmethod
     def fetch_available_repos() -> List[Dict]:
-        """Fetch all repos accessible to the user."""
+        """Fetch all repos accessible to the user.
+        
+        Works in both authenticated (PAT) and unauthenticated (username-only) modes.
+        """
         pat = AuthService.get_stored_pat()
-        if not pat:
-            raise ValueError("No PAT stored")
+        username = AuthService.get_stored_username()
+        
+        if not pat and not username:
+            raise ValueError("No PAT or username stored")
         
         with GitHubClient(pat) as client:
-            repos = client.list_repos()
+            # Pass username if in username-only mode
+            repos = client.list_repos(username=username if not pat else None)
         
         return [
             {
@@ -115,10 +121,15 @@ class SyncService:
         
         Args:
             range_days: Number of days to sync. If None, syncs all time (from 2008-01-01, GitHub's launch).
+        
+        Works in both authenticated (PAT) and unauthenticated (username-only) modes.
+        Note: Unauthenticated mode can only access public repos.
         """
         pat = AuthService.get_stored_pat()
-        if not pat:
-            raise ValueError("No PAT stored")
+        username = AuthService.get_stored_username()
+        
+        if not pat and not username:
+            raise ValueError("No PAT or username stored")
         
         repos = Repository.query.all()
         if not repos:
@@ -134,10 +145,10 @@ class SyncService:
             }
         
         until = datetime.now(timezone.utc)
-        # If range_days is None, sync from GitHub's launch date (2008-01-01)
+        # If range_days is None, sync from 5 years ago (to limit rate usage)
         if range_days is None:
-            since = datetime(2008, 1, 1, tzinfo=timezone.utc)
-            logger.info("Syncing all time (from 2008-01-01)")
+            since = until - timedelta(days=365 * 5)  # 5 years max
+            logger.info("Syncing all time (from 5 years ago)")
         else:
             since = until - timedelta(days=range_days)
         
@@ -147,9 +158,29 @@ class SyncService:
         total_prs = 0
         total_issues = 0
         
-        logger.info(f"Starting sync for {len(repos)} repo(s), range: {range_days} days")
+        auth_mode = "username-only" if not pat else "authenticated"
+        logger.info(f"Starting sync for {len(repos)} repo(s), range: {range_days} days, mode: {auth_mode}")
         
         with GitHubClient(pat) as client:
+            # Check rate limit before starting
+            try:
+                rate_limit_info = client.get_rate_limit()
+                remaining = rate_limit_info.get('rate', {}).get('remaining', 0)
+                limit = rate_limit_info.get('rate', {}).get('limit', 5000)
+                
+                # Estimate requests needed (rough estimate: 4 requests per repo on average)
+                estimated_requests = len(repos) * 4
+                
+                if remaining < estimated_requests + 100:  # Keep buffer of 100
+                    logger.warning(
+                        f"Rate limit low: {remaining}/{limit} remaining, "
+                        f"estimated need: {estimated_requests}. Proceeding with caution."
+                    )
+                else:
+                    logger.info(f"Rate limit OK: {remaining}/{limit} requests remaining")
+            except Exception as e:
+                logger.warning(f"Could not check rate limit: {e}. Proceeding anyway.")
+            
             for repo in repos:
                 try:
                     logger.info(f"Syncing {repo.full_name}...")
@@ -179,6 +210,19 @@ class SyncService:
                     
                     # Update last synced
                     repo.last_synced_at = datetime.now(timezone.utc)
+                    
+                    # Commit after each repo to avoid database locking
+                    try:
+                        db.session.commit()
+                    except Exception as commit_error:
+                        logger.error(f"Error committing data for {repo.full_name}: {commit_error}")
+                        db.session.rollback()
+                        failed_repos.append({
+                            "repo": repo.full_name,
+                            "error": f"Database commit failed: {commit_error}"
+                        })
+                        continue
+                    
                     synced_repos.append(repo.full_name)
                     logger.info(f"  Successfully synced {repo.full_name}")
                 
@@ -189,8 +233,18 @@ class SyncService:
                         "repo": repo.full_name,
                         "error": error_msg
                     })
+                    # Rollback any partial changes for this repo
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
         
-        db.session.commit()
+        # Final commit for any remaining operations (should be minimal since we commit after each repo)
+        try:
+            db.session.commit()
+        except Exception as commit_error:
+            logger.error(f"Error in final commit for repos: {commit_error}")
+            db.session.rollback()
         
         result = {
             "ok": len(failed_repos) == 0,
@@ -566,25 +620,38 @@ class SyncService:
         team_members = TeamMember.query.filter_by(is_active=True).all()
         team_member_logins = {tm.github_login for tm in team_members}
         
-        # Combine: all contributors + team members
+        # Also include explicitly configured external contributors
+        external_contributors = ExternalContributor.query.filter_by(is_active=True).all()
+        external_contributor_logins = {ec.github_login for ec in external_contributors}
+        
+        # Combine: all contributors + team members + external contributors
         all_users = {}
         for github_id, login in contributors:
             all_users[login] = github_id
         for tm in team_members:
             if tm.github_login not in all_users:
                 all_users[tm.github_login] = None  # We'll get github_id from events
+        for ec in external_contributors:
+            if ec.github_login not in all_users:
+                # For external-only contributors we may not know github_id yet; populate later from events/search
+                all_users[ec.github_login] = ec.github_user_id
         
-        logger.info(f"Tracking {len(all_users)} user(s): {len(contributors)} from repos + {len(team_member_logins)} configured team members")
+        logger.info(
+            f"Tracking {len(all_users)} user(s): "
+            f"{len(contributors)} from repos + "
+            f"{len(team_member_logins)} configured team members + "
+            f"{len(external_contributor_logins)} external contributors"
+        )
         
         # Get tracked repository full names
         tracked_repos = Repository.query.all()
         tracked_repo_names = {repo.full_name for repo in tracked_repos}
         
         until = datetime.now(timezone.utc)
-        # If range_days is None, sync from GitHub's launch date (2008-01-01)
+        # If range_days is None, sync from 5 years ago (to limit rate usage)
         if range_days is None:
-            since = datetime(2008, 1, 1, tzinfo=timezone.utc)
-            logger.info("Syncing external commits for all time (from 2008-01-01)")
+            since = until - timedelta(days=365 * 5)  # 5 years max
+            logger.info("Syncing external commits for all time (from 5 years ago)")
         else:
             since = until - timedelta(days=range_days)
         
@@ -595,6 +662,25 @@ class SyncService:
         logger.info(f"Starting external commit sync for {len(all_users)} contributor(s)")
         
         with GitHubClient(pat) as client:
+            # Check rate limit before starting
+            try:
+                rate_limit_info = client.get_rate_limit()
+                remaining = rate_limit_info.get('rate', {}).get('remaining', 0)
+                limit = rate_limit_info.get('rate', {}).get('limit', 5000)
+                
+                # Estimate requests needed (2 requests per user: events + search)
+                estimated_requests = len(all_users) * 2
+                
+                if remaining < estimated_requests + 100:  # Keep buffer of 100
+                    logger.warning(
+                        f"Rate limit low: {remaining}/{limit} remaining, "
+                        f"estimated need: {estimated_requests}. Proceeding with caution."
+                    )
+                else:
+                    logger.info(f"Rate limit OK: {remaining}/{limit} requests remaining")
+            except Exception as e:
+                logger.warning(f"Could not check rate limit: {e}. Proceeding anyway.")
+            
             for login, github_id in all_users.items():
                 try:
                     logger.info(f"Fetching external commits for {login}...")
@@ -676,6 +762,14 @@ class SyncService:
                             db.session.add(external_commit)
                             commits_processed += 1
                             total_external_commits += 1
+                            
+                            # Commit every 50 commits to avoid database locking
+                            if commits_processed % 50 == 0:
+                                try:
+                                    db.session.commit()
+                                except Exception as commit_error:
+                                    logger.warning(f"Error committing external commits for {login}: {commit_error}")
+                                    db.session.rollback()
                     
                     # Process search results for more comprehensive coverage
                     for commit_result in search_results:
@@ -735,13 +829,29 @@ class SyncService:
                             commits_processed += 1
                             total_external_commits += 1
                             
+                            # Commit every 50 commits to avoid database locking
+                            if total_external_commits % 50 == 0:
+                                try:
+                                    db.session.commit()
+                                except Exception as commit_error:
+                                    logger.warning(f"Error committing external commits for {login}: {commit_error}")
+                                    db.session.rollback()
+                            
                         except Exception as e:
                             logger.debug(f"Error processing search result for {login}: {e}")
                             continue
                     
+                    # Commit remaining commits for this user
+                    if commits_processed > 0:
+                        try:
+                            db.session.commit()
+                        except Exception as commit_error:
+                            logger.warning(f"Error committing final external commits for {login}: {commit_error}")
+                            db.session.rollback()
+                    
                     synced_members.append(login)
                     logger.info(f"  Found {commits_processed} external commits for {login}")
-                    
+                
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"Error syncing external commits for {login}: {error_msg}", exc_info=True)
@@ -749,8 +859,18 @@ class SyncService:
                         "member": login,
                         "error": error_msg
                     })
+                    # Rollback any partial changes for this user
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
         
-        db.session.commit()
+        # Final commit for any remaining operations (should be minimal since we commit periodically)
+        try:
+            db.session.commit()
+        except Exception as commit_error:
+            logger.error(f"Error in final commit for external commits: {commit_error}")
+            db.session.rollback()
         
         logger.info(f"External commit sync completed: {len(synced_members)} successful, {len(failed_members)} failed, {total_external_commits} commits")
         
@@ -759,5 +879,166 @@ class SyncService:
             "synced_members": synced_members,
             "failed_members": failed_members,
             "external_commits_synced": total_external_commits
+        }
+    
+    @staticmethod
+    def sync_external_contributors(range_days: Optional[int] = 7) -> Dict:
+        """Sync commits from manually configured external contributors to selected repos.
+        
+        This function fetches commits from external contributors (configured in ExternalContributor table)
+        to all selected repositories and marks them as external contributors.
+        
+        Args:
+            range_days: Number of days to sync. If None, syncs all time (from 2008-01-01).
+        """
+        pat = AuthService.get_stored_pat()
+        if not pat:
+            raise ValueError("No PAT stored")
+        
+        # Get external contributors
+        external_contributors = ExternalContributor.query.filter_by(is_active=True).all()
+        
+        if not external_contributors:
+            logger.info("No external contributors configured")
+            return {
+                "ok": True,
+                "message": "No external contributors configured",
+                "synced_contributors": 0
+            }
+        
+        # Get selected repos
+        repos = Repository.query.all()
+        if not repos:
+            logger.info("No repositories selected")
+            return {
+                "ok": True,
+                "message": "No repositories selected",
+                "synced_contributors": 0
+            }
+        
+        until = datetime.now(timezone.utc)
+        if range_days is None:
+            since = until - timedelta(days=365 * 5)  # 5 years max
+            logger.info("Syncing external contributor commits for all time (from 5 years ago)")
+        else:
+            since = until - timedelta(days=range_days)
+        
+        synced_contributors = []
+        failed_contributors = []
+        total_commits_processed = 0
+        
+        logger.info(f"Starting external contributor sync for {len(external_contributors)} contributor(s) across {len(repos)} repo(s)")
+        
+        with GitHubClient(pat) as client:
+            # Check rate limit before starting
+            try:
+                rate_limit_info = client.get_rate_limit()
+                remaining = rate_limit_info.get('rate', {}).get('remaining', 0)
+                limit = rate_limit_info.get('rate', {}).get('limit', 5000)
+                
+                # Estimate requests needed (1 user info + commits per repo)
+                estimated_requests = len(external_contributors) * (1 + len(repos))
+                
+                if remaining < estimated_requests + 100:  # Keep buffer of 100
+                    logger.warning(
+                        f"Rate limit low: {remaining}/{limit} remaining, "
+                        f"estimated need: {estimated_requests}. Proceeding with caution."
+                    )
+                else:
+                    logger.info(f"Rate limit OK: {remaining}/{limit} requests remaining")
+            except Exception as e:
+                logger.warning(f"Could not check rate limit: {e}. Proceeding anyway.")
+            
+            for ext_contributor in external_contributors:
+                try:
+                    login = ext_contributor.github_login
+                    logger.info(f"Fetching commits for external contributor {login}...")
+                    
+                    # Get user info to update github_user_id if not set
+                    if not ext_contributor.github_user_id:
+                        try:
+                            user_data = client.get_user(login)
+                            if user_data and user_data.get('id'):
+                                ext_contributor.github_user_id = user_data['id']
+                        except Exception as e:
+                            logger.warning(f"Could not fetch user data for {login}: {e}")
+                    
+                    commits_for_contributor = 0
+                    
+                    # For each selected repo, fetch commits from this contributor
+                    for repo in repos:
+                        try:
+                            # Fetch commits from this specific author
+                            commits = client.get_commits(
+                                repo.owner, 
+                                repo.name, 
+                                author=login,
+                                since=since, 
+                                until=until
+                            )
+                            
+                            logger.info(f"  Found {len(commits)} commits from {login} in {repo.full_name}")
+                            
+                            if commits:
+                                # Process these commits
+                                SyncService._process_commits(repo, commits, since, until, client)
+                                commits_for_contributor += len(commits)
+                                total_commits_processed += len(commits)
+                                
+                                # Commit after each repo to avoid database locking
+                                try:
+                                    db.session.commit()
+                                except Exception as commit_error:
+                                    logger.warning(f"Error committing after repo {repo.full_name}: {commit_error}")
+                                    db.session.rollback()
+                        
+                        except Exception as e:
+                            logger.warning(f"Error fetching commits from {login} in {repo.full_name}: {e}")
+                            # Rollback any partial changes for this repo
+                            try:
+                                db.session.rollback()
+                            except Exception:
+                                pass
+                            continue
+                    
+                    # Update last synced timestamp
+                    ext_contributor.last_synced_at = datetime.now(timezone.utc)
+                    # Commit the timestamp update
+                    try:
+                        db.session.commit()
+                    except Exception as commit_error:
+                        logger.warning(f"Error committing timestamp for {login}: {commit_error}")
+                        db.session.rollback()
+                    
+                    synced_contributors.append(login)
+                    logger.info(f"  Synced {commits_for_contributor} commits for {login}")
+                
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"Error syncing external contributor {ext_contributor.github_login}: {error_msg}", exc_info=True)
+                    failed_contributors.append({
+                        "contributor": ext_contributor.github_login,
+                        "error": error_msg
+                    })
+                    # Rollback any partial changes for this contributor
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+        
+        # Final commit for any remaining operations (should be minimal since we commit after each repo)
+        try:
+            db.session.commit()
+        except Exception as commit_error:
+            logger.error(f"Error in final commit: {commit_error}")
+            db.session.rollback()
+        
+        logger.info(f"External contributor sync completed: {len(synced_contributors)} successful, {len(failed_contributors)} failed, {total_commits_processed} commits processed")
+        
+        return {
+            "ok": len(failed_contributors) == 0,
+            "synced_contributors": synced_contributors,
+            "failed_contributors": failed_contributors,
+            "commits_processed": total_commits_processed
         }
 

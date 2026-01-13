@@ -10,6 +10,10 @@ class PatSubmission(BaseModel):
     store_mode: str = Field(default="encrypted", pattern="^(encrypted|memory)$")
 
 
+class UsernameSubmission(BaseModel):
+    username: str = Field(..., min_length=1)
+
+
 class RepoSelection(BaseModel):
     repo_full_names: List[str] = Field(..., min_items=1)
 
@@ -30,6 +34,10 @@ class SettingsUpdate(BaseModel):
 class InternalOrgsUpdate(BaseModel):
     organizations: List[str]
     repos: Optional[List[str]] = Field(default_factory=list)
+
+
+class ExternalContributorUpdate(BaseModel):
+    github_logins: List[str]
 
 
 # Response schemas

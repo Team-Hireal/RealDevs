@@ -3,12 +3,12 @@ from flask import jsonify, request
 from app.api import api_bp
 from app.api.schemas import (
     PatSubmission, RepoSelection, SyncRequest, TeamMemberUpdate, SettingsUpdate,
-    InternalOrgsUpdate
+    InternalOrgsUpdate, ExternalContributorUpdate, UsernameSubmission
 )
 from app.services.auth_service import AuthService
 from app.services.sync_service import SyncService
 from app.services.metrics_service import MetricsService
-from app.models import db, TeamMember, Settings
+from app.models import db, TeamMember, Settings, ExternalContributor
 from pydantic import ValidationError
 import logging
 
@@ -51,6 +51,18 @@ def submit_pat(data: PatSubmission):
         return jsonify(result)
     except Exception as e:
         logger.error(f"Error in submit_pat: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@api_bp.route('/auth/username', methods=['POST'])
+@validate_request(UsernameSubmission)
+def submit_username(data: UsernameSubmission):
+    """Store GitHub username for unauthenticated access (public data only)."""
+    try:
+        result = AuthService.store_username(data.username)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in submit_username: {e}")
         return jsonify({"ok": False, "error": str(e)}), 400
 
 
@@ -128,13 +140,24 @@ def sync_repos():
         # Sync internal repos
         result = SyncService.sync_repos(range_days=range_days)
         
-        # Sync external commits
+        # Sync external commits (commits by team to non-tracked repos)
         try:
             external_result = SyncService.sync_external_commits(range_days=range_days)
             result["external_commits"] = external_result
         except Exception as e:
             logger.error(f"Error syncing external commits: {e}", exc_info=True)
             result["external_commits"] = {
+                "ok": False,
+                "error": str(e)
+            }
+        
+        # Sync external contributors (commits by external contributors to tracked repos)
+        try:
+            external_contributors_result = SyncService.sync_external_contributors(range_days=range_days)
+            result["external_contributors"] = external_contributors_result
+        except Exception as e:
+            logger.error(f"Error syncing external contributors: {e}", exc_info=True)
+            result["external_contributors"] = {
                 "ok": False,
                 "error": str(e)
             }
@@ -387,6 +410,49 @@ def update_internal_orgs(data: InternalOrgsUpdate):
         })
     except Exception as e:
         logger.error(f"Error updating internal orgs: {e}")
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@api_bp.route('/external-contributors', methods=['GET'])
+def get_external_contributors():
+    """Get configured external contributors."""
+    contributors = ExternalContributor.query.filter_by(is_active=True).all()
+    return jsonify({
+        "contributors": [
+            {
+                "id": c.id,
+                "github_login": c.github_login,
+                "github_user_id": c.github_user_id,
+                "last_synced_at": c.last_synced_at.isoformat() if c.last_synced_at else None,
+                "created_at": c.created_at.isoformat()
+            }
+            for c in contributors
+        ]
+    })
+
+
+@api_bp.route('/external-contributors', methods=['POST'])
+@validate_request(ExternalContributorUpdate)
+def update_external_contributors(data: ExternalContributorUpdate):
+    """Update external contributors list."""
+    try:
+        # Clear existing
+        ExternalContributor.query.delete()
+        
+        # Add new
+        for login in data.github_logins:
+            contributor = ExternalContributor(github_login=login, is_active=True)
+            db.session.add(contributor)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "ok": True,
+            "message": f"Updated {len(data.github_logins)} external contributors"
+        })
+    except Exception as e:
+        logger.error(f"Error updating external contributors: {e}")
         db.session.rollback()
         return jsonify({"ok": False, "error": str(e)}), 500
 

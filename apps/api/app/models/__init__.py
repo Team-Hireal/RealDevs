@@ -134,3 +134,16 @@ class ExternalCommit(db.Model):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+
+class ExternalContributor(db.Model):
+    """Stores manually configured external contributors to track."""
+    __tablename__ = 'external_contributors'
+    
+    id = Column(Integer, primary_key=True)
+    github_login = Column(String(255), unique=True, nullable=False, index=True)
+    github_user_id = Column(Integer, nullable=True, index=True)
+    is_active = Column(Boolean, default=True)
+    last_synced_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+

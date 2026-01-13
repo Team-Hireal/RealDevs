@@ -13,7 +13,46 @@ _memory_token_store: Dict[str, str] = {}
 
 
 class AuthService:
-    """Manages GitHub PAT authentication."""
+    """Manages GitHub PAT authentication and username-only mode."""
+    
+    @staticmethod
+    def store_username(username: str) -> Dict:
+        """Store GitHub username for unauthenticated access (public data only)."""
+        try:
+            # Validate that the username exists by fetching user info
+            with GitHubClient() as client:
+                user_info = client.get_user(username)
+            
+            if not user_info:
+                raise ValueError(f"GitHub user '{username}' not found")
+            
+            github_id = user_info.get('id')
+            github_login = user_info.get('login')
+            
+            if not github_login or not github_id:
+                raise ValueError("Invalid GitHub user info")
+            
+            # Store in memory only (no PAT to encrypt)
+            _memory_token_store['username_mode'] = True
+            _memory_token_store['github_login'] = github_login
+            _memory_token_store['github_id'] = str(github_id)
+            
+            logger.info(f"Username stored (unauthenticated mode) for user: {github_login}")
+            
+            return {
+                "ok": True,
+                "user": {
+                    "login": github_login,
+                    "id": github_id,
+                    "name": user_info.get('name'),
+                    "avatar_url": user_info.get('avatar_url')
+                },
+                "mode": "username_only"
+            }
+        
+        except Exception as e:
+            logger.error(f"Error storing username: {e}")
+            raise
     
     @staticmethod
     def validate_and_store_pat(pat: str, store_mode: str = "encrypted") -> Dict:
@@ -69,7 +108,8 @@ class AuthService:
                     "id": github_id,
                     "name": user_info.get('name'),
                     "avatar_url": user_info.get('avatar_url')
-                }
+                },
+                "mode": "pat"
             }
         
         except Exception as e:
@@ -78,7 +118,14 @@ class AuthService:
     
     @staticmethod
     def get_stored_pat() -> Optional[str]:
-        """Retrieve stored PAT (from DB or memory)."""
+        """Retrieve stored PAT (from DB or memory).
+        
+        Returns None if in username-only mode.
+        """
+        # Check if in username-only mode
+        if _memory_token_store.get('username_mode', False):
+            return None
+        
         # Check memory store first
         if 'current_pat' in _memory_token_store:
             return _memory_token_store['current_pat']
@@ -92,14 +139,28 @@ class AuthService:
         return None
     
     @staticmethod
+    def get_stored_username() -> Optional[str]:
+        """Retrieve stored username for unauthenticated mode."""
+        if 'github_login' in _memory_token_store:
+            return _memory_token_store['github_login']
+        return None
+    
+    @staticmethod
+    def is_username_only_mode() -> bool:
+        """Check if currently in username-only (unauthenticated) mode."""
+        return _memory_token_store.get('username_mode', False)
+    
+    @staticmethod
     def get_user_info() -> Optional[Dict]:
         """Get stored user info without exposing PAT."""
         # Check memory store first
         if 'github_login' in _memory_token_store:
+            is_username_mode = _memory_token_store.get('username_mode', False)
             return {
                 "login": _memory_token_store['github_login'],
                 "id": int(_memory_token_store['github_id']),
-                "store_mode": "memory"
+                "store_mode": "username_only" if is_username_mode else "memory",
+                "authenticated": not is_username_mode
             }
         
         # Check database
@@ -108,7 +169,8 @@ class AuthService:
             return {
                 "login": auth_token.github_user_login,
                 "id": auth_token.github_user_id,
-                "store_mode": auth_token.store_mode
+                "store_mode": auth_token.store_mode,
+                "authenticated": True
             }
         
         return None

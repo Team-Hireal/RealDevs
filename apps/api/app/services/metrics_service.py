@@ -1,7 +1,7 @@
 """Service for computing metrics and risk flags."""
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
-from app.models import Repository, Contributor, DailyStats, TeamMember, Settings, ExternalCommit
+from app.models import Repository, Contributor, DailyStats, TeamMember, Settings, ExternalCommit, ExternalContributor
 from sqlalchemy import func
 from collections import defaultdict
 import logging
@@ -58,7 +58,16 @@ class MetricsService:
         1. Team member list
         2. Internal organizations (repo owner is in internal orgs)
         3. Internal repos list (repo is explicitly listed)
+        4. NOT in external contributors list (explicitly marked as external)
         """
+        # Check if contributor is explicitly marked as external
+        external_contributor = ExternalContributor.query.filter_by(
+            github_login=login,
+            is_active=True
+        ).first()
+        if external_contributor:
+            return False  # Explicitly external
+        
         # Check if contributor is in team members
         if login in team_logins:
             return True
@@ -128,9 +137,9 @@ class MetricsService:
     def get_dashboard_data(range_days: Optional[int] = 7) -> Dict:
         """Get all dashboard data including metrics and risk flags."""
         until = datetime.now(timezone.utc)
-        # If range_days is None, use a very early date (effectively all time)
+        # If range_days is None, use 5 years ago as limit (to reduce query load)
         if range_days is None:
-            since = datetime(2000, 1, 1, tzinfo=timezone.utc)  # GitHub was founded in 2008, but use 2000 to be safe
+            since = until - timedelta(days=365 * 5)  # 5 years max
         else:
             since = until - timedelta(days=range_days)
         
@@ -227,16 +236,30 @@ class MetricsService:
             # Use github_id as the key to aggregate same user across multiple repos
             github_id = contributor.github_id
             login = contributor.login
-            is_internal = MetricsService._is_internal_contributor(login, repo_full_name, team_logins, internal_orgs_config)
+            
+            # Check if this user is explicitly marked as external contributor
+            is_external_contributor = ExternalContributor.query.filter_by(
+                github_login=login,
+                is_active=True
+            ).first() is not None
+            
+            # If explicitly marked as external contributor, always mark as external
+            if is_external_contributor:
+                is_internal = False
+            else:
+                # Otherwise, use normal internal/external logic
+                is_internal = MetricsService._is_internal_contributor(login, repo_full_name, team_logins, internal_orgs_config)
             
             user_stats[github_id]["commits"] += stat.commits_count
             user_stats[github_id]["prs_opened"] += stat.prs_opened
             user_stats[github_id]["prs_merged"] += stat.prs_merged
             user_stats[github_id]["issues_closed"] += stat.issues_closed
             user_stats[github_id]["login"] = login
-            # Mark as internal if ANY of their work is internal
+            # Mark as internal if ANY of their work is internal (but not if explicitly external contributor)
             if is_internal:
                 user_stats[github_id]["is_internal"] = True
+            elif is_external_contributor:
+                user_stats[github_id]["is_internal"] = False
         
         # Now sum up totals from the aggregated user stats
         total_commits_from_tracked = sum(u["commits"] for u in user_stats.values())
@@ -570,7 +593,21 @@ class MetricsService:
             # Use github_id as the key to aggregate same user across multiple repos
             github_id = contributor.github_id
             
-            is_internal = MetricsService._is_internal_contributor(contributor.login, repo_full_name, team_logins, internal_orgs_config)
+            # Check if this user is explicitly marked as external contributor
+            is_external_contributor = ExternalContributor.query.filter_by(
+                github_login=contributor.login,
+                is_active=True
+            ).first() is not None
+            
+            # If explicitly marked as external contributor, always mark as external
+            if is_external_contributor:
+                user_stats[github_id]["is_internal"] = False
+            else:
+                # Otherwise, use normal internal/external logic
+                is_internal = MetricsService._is_internal_contributor(contributor.login, repo_full_name, team_logins, internal_orgs_config)
+                # Mark as internal if ANY of their work is internal
+                if is_internal:
+                    user_stats[github_id]["is_internal"] = True
             
             user_stats[github_id]["commits"] += stat.commits_count
             user_stats[github_id]["prs_opened"] += stat.prs_opened
@@ -579,9 +616,6 @@ class MetricsService:
             user_stats[github_id]["login"] = contributor.login
             user_stats[github_id]["name"] = contributor.name
             user_stats[github_id]["avatar_url"] = contributor.avatar_url
-            # Mark as internal if ANY of their work is internal
-            if is_internal:
-                user_stats[github_id]["is_internal"] = True
             
             # Calculate weighted score for this day
             daily_score = (
@@ -593,6 +627,48 @@ class MetricsService:
             
             # Use date as key (normalize to date only, ignoring time)
             date_key = stat.date.date() if hasattr(stat.date, 'date') else stat.date
+            user_stats[github_id]["daily_scores"][date_key] += daily_score
+        
+        # ----------------------------------------------------------------------------------
+        # Include contributors that ONLY have external commits (ExternalCommit records)
+        # ----------------------------------------------------------------------------------
+        # This allows users like external collaborators (e.g. MiltonHeYan) whose commits
+        # are stored in ExternalCommit but who don't appear in DailyStats/Contributor
+        # to still show up in the dashboard contributors list and be selectable in the UI.
+        external_commits = ExternalCommit.query.filter(
+            ExternalCommit.commit_date >= since,
+            ExternalCommit.commit_date <= until
+        ).all()
+        
+        for ext_commit in external_commits:
+            github_id = ext_commit.github_user_id
+            login = ext_commit.github_user_login
+            
+            # Check if this user is explicitly marked as external contributor
+            is_external_contributor = ExternalContributor.query.filter_by(
+                github_login=login,
+                is_active=True
+            ).first() is not None
+            
+            # Increment commit count for this user
+            user_stats[github_id]["commits"] += 1
+            
+            # ExternalCommit records are ALWAYS external (commits to non-tracked repos)
+            # If user is explicitly marked as external contributor, ensure they're marked as external
+            if is_external_contributor:
+                user_stats[github_id]["is_internal"] = False
+            # If user is a team member, they might have both internal and external commits
+            # But ExternalCommit records themselves are always external, so don't mark as internal
+            # Only mark as internal if they have internal commits from DailyStats
+            # (which is already handled above in the DailyStats processing loop)
+            
+            # Preserve login if not already set from internal stats
+            if not user_stats[github_id]["login"]:
+                user_stats[github_id]["login"] = login
+            
+            # Add to daily scores for trend calculation (1 commit, no PRs/issues)
+            date_key = ext_commit.commit_date.date() if hasattr(ext_commit.commit_date, "date") else ext_commit.commit_date
+            daily_score = weights["commits"]  # Single commit with commit weight
             user_stats[github_id]["daily_scores"][date_key] += daily_score
         
         # Build result
@@ -704,6 +780,16 @@ class MetricsService:
                 "twitter_url": None,
                 "website_url": None
             })
+            
+            # Final check: If user is explicitly marked as external contributor, ensure they're external
+            login = metrics["login"]
+            if login:
+                is_external_contributor = ExternalContributor.query.filter_by(
+                    github_login=login,
+                    is_active=True
+                ).first() is not None
+                if is_external_contributor:
+                    metrics["is_internal"] = False
             
             results.append({
                 "login": metrics["login"],
@@ -837,9 +923,9 @@ class MetricsService:
     def get_daily_commits(range_days: Optional[int] = 7, contributor_login: Optional[str] = None) -> Dict:
         """Get daily commit counts for charting, optionally filtered by contributor."""
         until = datetime.now(timezone.utc)
-        # If range_days is None, use a very early date (effectively all time)
+        # If range_days is None, use 5 years ago as limit (to reduce query load)
         if range_days is None:
-            since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+            since = until - timedelta(days=365 * 5)  # 5 years max
         else:
             since = until - timedelta(days=range_days)
         
@@ -893,10 +979,20 @@ class MetricsService:
             # Get repo full name
             repo_full_name = repo_map.get(stat.repo_id, "")
             
-            # Determine if internal
-            is_internal = MetricsService._is_internal_contributor(
-                contributor.login, repo_full_name, team_logins, internal_orgs_config
-            )
+            # Check if this user is explicitly marked as external contributor
+            is_external_contributor = ExternalContributor.query.filter_by(
+                github_login=contributor.login,
+                is_active=True
+            ).first() is not None
+            
+            # If explicitly marked as external contributor, always mark as external
+            if is_external_contributor:
+                is_internal = False
+            else:
+                # Otherwise, use normal internal/external logic
+                is_internal = MetricsService._is_internal_contributor(
+                    contributor.login, repo_full_name, team_logins, internal_orgs_config
+                )
             
             # Format date as YYYY-MM-DD
             date_str = stat.date.strftime("%Y-%m-%d")
@@ -923,10 +1019,12 @@ class MetricsService:
         external_commits_count = len(external_commits_list)
         
         # Add external commits to daily_data by date
+        # Note: ALL ExternalCommit records are external by definition (commits to non-tracked repos)
         for ext_commit in external_commits_list:
             # Format date as YYYY-MM-DD
             date_str = ext_commit.commit_date.strftime("%Y-%m-%d")
             daily_data[date_str]["total"] += 1
+            # ExternalCommit records are ALWAYS external, regardless of user classification
             daily_data[date_str]["external"] += 1
         
         # Convert to sorted list
@@ -1024,66 +1122,88 @@ class MetricsService:
         repos = data["repo_summaries"]
         flags = data["risk_flags"]
         contributors = data["contributors"]
-        
-        # Build text
-        lines = []
-        lines.append(f"📊 Weekly Recap ({range_days_label})")
-        lines.append("=" * 50)
+
+        total_commits = summary.get("total_commits", 0) or 0
+        total_prs_merged = summary.get("total_prs_merged", 0) or 0
+        total_prs_opened = summary.get("total_prs_opened", 0) or 0
+        total_issues_closed = summary.get("total_issues_closed", 0) or 0
+        avg_trend = summary.get("average_trend", 0) or 0.0
+        internal_pct = summary.get("internal_percentage", 0.0) or 0.0
+        external_pct = summary.get("external_percentage", 0.0) or 0.0
+
+        if avg_trend > 0.2:
+            trend_label = "upward"
+        elif avg_trend < -0.2:
+            trend_label = "downward"
+        else:
+            trend_label = "flat"
+
+        internal_flags = [f for f in flags if f.get("severity") in ("high", "medium")]
+        high_flags = [f for f in flags if f.get("severity") == "high"]
+        medium_flags = [f for f in flags if f.get("severity") == "medium"]
+
+        # Find top contributors
+        top_contributors = sorted(
+            [c for c in contributors if c.get("is_internal", False)],
+            key=lambda x: x.get("average_trend", 0.0) or 0.0,
+            reverse=True
+        )[:3]
+
+        # Find top repos
+        top_repos = sorted(
+            repos,
+            key=lambda r: (r.get("average_trend", 0.0) or 0.0),
+            reverse=True
+        )[:3]
+
+        lines: List[str] = []
+        lines.append(f"Weekly Engineering Summary ({range_days_label})")
         lines.append("")
         
-        # Team summary
-        lines.append("🔹 Team Activity:")
-        lines.append(f"  • {summary.get('total_commits', 0)} commits")
-        lines.append(f"  • {summary.get('total_prs_merged', 0)} PRs merged")
-        lines.append(f"  • {summary.get('total_prs_opened', 0)} PRs opened")
-        lines.append(f"  • {summary.get('total_issues_closed', 0)} issues closed")
-        avg_trend = summary.get('average_trend', 0)
-        trend_label = "↑ Positive" if avg_trend > 0 else "↓ Negative" if avg_trend < 0 else "→ Neutral"
-        lines.append(f"  • Average Trend: {avg_trend:.2f} ({trend_label})")
+        # Activity Summary
+        lines.append("Activity Summary")
+        lines.append("As shown in the Daily Commits chart above:")
+        lines.append(f"• {total_commits} total commits")
+        lines.append(f"• {total_prs_opened} pull requests opened")
+        lines.append(f"• {total_prs_merged} pull requests merged")
+        lines.append(f"• {total_issues_closed} issues closed")
         lines.append("")
         
-        # Internal vs External
-        lines.append("🔹 Contribution Split:")
-        lines.append(f"  • Internal: {summary.get('internal_percentage', 0):.1f}%")
-        lines.append(f"  • External: {summary.get('external_percentage', 0):.1f}%")
+        # Trend Analysis
+        lines.append("Trend Analysis")
+        lines.append("Based on the trend indicators in the dashboard:")
+        lines.append(f"• Overall momentum: {trend_label} (score: {avg_trend:.2f})")
+        if top_contributors:
+            top_contrib = top_contributors[0]
+            lines.append(f"• Top performer: {top_contrib['login']} (trend: {top_contrib.get('average_trend', 0.0) or 0.0:.2f})")
         lines.append("")
         
-        # Top repos
-        if repos:
-            top_repos = sorted(repos, key=lambda r: r.get('average_trend', 0), reverse=True)[:3]
-            lines.append("🔹 Most Active Repos:")
-            for repo in top_repos:
-                trend = repo.get('average_trend', 0)
-                lines.append(f"  • {repo['full_name']} (trend: {trend:.2f})")
+        # Contribution Mix
+        lines.append("Contribution Mix")
+        lines.append("As illustrated in the Contribution Split pie chart:")
+        lines.append(f"• Internal: {internal_pct:.1f}%")
+        lines.append(f"• External: {external_pct:.1f}%")
+        lines.append("")
+        
+        # Repository Focus
+        if top_repos:
+            lines.append("Repository Focus")
+            lines.append("Top repositories by activity (see Contribution Split chart):")
+            for repo in top_repos[:2]:
+                repo_trend = repo.get("average_trend", 0.0) or 0.0
+                lines.append(f"• {repo['full_name']} (trend: {repo_trend:.2f})")
             lines.append("")
         
-        # Top contributors
-        if contributors:
-            top_contributors = [c for c in contributors if c['is_internal']][:5]
-            if top_contributors:
-                lines.append("🔹 Top Contributors:")
-                for contrib in top_contributors:
-                    trend = contrib.get('average_trend', 0)
-                    lines.append(f"  • {contrib['login']} (trend: {trend:.2f})")
-                lines.append("")
-        
-        # Risk flags
-        if flags:
-            lines.append("⚠️ Risk Flags:")
-            for flag in flags[:5]:  # Limit to top 5
-                lines.append(f"  • [{flag['severity'].upper()}] {flag['title']}")
-            lines.append("")
-        
-        # Recommendations
-        lines.append("💡 Suggested Actions:")
-        if summary.get('total_prs_opened', 0) > summary.get('total_prs_merged', 0) * 1.5:
-            lines.append("  • Review and merge pending PRs to reduce bottleneck")
-        if any(f['type'] == 'single_point_of_failure' for f in flags):
-            lines.append("  • Consider knowledge sharing to reduce bus factor")
-        if any(f['type'] == 'no_activity' for f in flags):
-            lines.append("  • Check on stale repos and close or archive if no longer needed")
-        if not flags:
-            lines.append("  • Keep up the great work! No major issues detected.")
-        
+        # Risk Assessment
+        lines.append("Risk Assessment")
+        if internal_flags:
+            lines.append(f"As highlighted in the Risk Flags section ({len(high_flags)} high, {len(medium_flags)} medium):")
+            if high_flags:
+                lines.append(f"• {high_flags[0].get('title', 'High priority issue detected')}")
+            if medium_flags and not high_flags:
+                lines.append(f"• {medium_flags[0].get('title', 'Medium priority issue detected')}")
+        else:
+            lines.append("• No high or medium risk flags detected this period")
+
         return "\n".join(lines)
 

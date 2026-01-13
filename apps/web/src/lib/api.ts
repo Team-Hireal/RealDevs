@@ -87,6 +87,14 @@ export interface TeamMember {
   created_at: string
 }
 
+export interface ExternalContributor {
+  id: number
+  github_login: string
+  github_user_id?: number
+  last_synced_at?: string
+  created_at: string
+}
+
 export interface Settings {
   [key: string]: string
 }
@@ -133,6 +141,13 @@ class ApiClient {
     return this.request<AuthResponse>('/auth/pat', {
       method: 'POST',
       body: JSON.stringify({ pat, store_mode: storeMode }),
+    })
+  }
+
+  async submitUsername(username: string): Promise<AuthResponse> {
+    return this.request<AuthResponse>('/auth/username', {
+      method: 'POST',
+      body: JSON.stringify({ username }),
     })
   }
 
@@ -250,6 +265,17 @@ class ApiClient {
     return this.request<{ ok: boolean; message: string }>('/internal-orgs', {
       method: 'POST',
       body: JSON.stringify({ organizations, repos }),
+    })
+  }
+
+  async getExternalContributors() {
+    return this.request<{ contributors: ExternalContributor[] }>('/external-contributors')
+  }
+
+  async updateExternalContributors(githubLogins: string[]) {
+    return this.request<{ ok: boolean; message: string }>('/external-contributors', {
+      method: 'POST',
+      body: JSON.stringify({ github_logins: githubLogins }),
     })
   }
 }
