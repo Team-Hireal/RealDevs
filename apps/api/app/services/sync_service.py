@@ -685,91 +685,17 @@ class SyncService:
                 try:
                     logger.info(f"Fetching external commits for {login}...")
                     
-                    # If github_id is None (e.g., ExternalContributor without github_id), fetch user info first
-                    if github_id is None:
-                        try:
-                            user_data = client.get_user(login)
-                            if user_data and user_data.get('id'):
-                                github_id = user_data['id']
-                                # Update ExternalContributor record if it exists
-                                ext_contrib = ExternalContributor.query.filter_by(github_login=login).first()
-                                if ext_contrib:
-                                    ext_contrib.github_user_id = github_id
-                                    db.session.commit()
-                                all_users[login] = github_id  # Update cache
-                                logger.info(f"  Fetched github_id {github_id} for {login}")
-                        except Exception as e:
-                            logger.warning(f"  Could not fetch user info for {login}: {e}")
-                    
                     # Method 1: Use GitHub Events API (recent activity, up to 300 events)
-                    # Increase pages to get more events
                     events = client.get_user_events(login, per_page=100)
-                    logger.info(f"  Found {len(events)} events via Events API for {login}")
-                    push_events = [e for e in events if e.get('type') == 'PushEvent']
-                    logger.info(f"  Found {len(push_events)} PushEvents for {login}")
                     
                     # Method 2: Use GitHub Search API for comprehensive history
                     # This searches ALL commits by the user across GitHub
                     try:
                         search_results = client.search_commits(login, since=since, until=until)
-                        logger.info(f"  Found {len(search_results)} commits via search for {login} (range: {since.date()} to {until.date()})")
-                        if len(search_results) > 0:
-                            # Log sample of repos found
-                            sample_repos = set()
-                            for r in search_results[:10]:
-                                repo = r.get('repository', {}).get('full_name', 'unknown')
-                                sample_repos.add(repo)
-                            logger.info(f"  Sample repos from search: {', '.join(list(sample_repos)[:5])}")
+                        logger.info(f"  Found {len(search_results)} commits via search for {login}")
                     except Exception as e:
-                        logger.warning(f"  Search API failed for {login}: {e}", exc_info=True)
+                        logger.warning(f"  Search API failed for {login}: {e}")
                         search_results = []
-                    
-                    # Method 3: For ExternalContributor users, also check their public repositories
-                    # This helps find commits that Search API might miss
-                    # Always do this for ExternalContributor users since Search API is unreliable
-                    ext_contrib = ExternalContributor.query.filter_by(github_login=login).first()
-                    if ext_contrib:
-                        logger.info(f"  Search returned no results for {login}, trying to fetch from their public repos...")
-                        try:
-                            user_repos = client.get_user_repos(login, type="all")
-                            logger.info(f"  Found {len(user_repos)} public repos for {login}")
-                            
-                            # Query commits from each repo (limit to avoid too many API calls)
-                            for repo in user_repos[:20]:  # Limit to first 20 repos
-                                repo_full_name = repo.get('full_name')
-                                if not repo_full_name or repo_full_name in tracked_repo_names:
-                                    continue
-                                
-                                try:
-                                    repo_commits = client.get_commits(
-                                        repo.get('owner', {}).get('login') or repo_full_name.split('/')[0],
-                                        repo.get('name'),
-                                        author=login,
-                                        since=since,
-                                        until=until
-                                    )
-                                    if repo_commits:
-                                        logger.info(f"    Found {len(repo_commits)} commits in {repo_full_name}")
-                                        # Add these to search_results for processing
-                                        for commit in repo_commits:
-                                            # Format to match search result format
-                                            formatted_commit = {
-                                                'sha': commit.get('sha'),
-                                                'repository': {'full_name': repo_full_name},
-                                                'commit': {
-                                                    'author': commit.get('commit', {}).get('author', {}),
-                                                    'message': commit.get('commit', {}).get('message', '')
-                                                },
-                                                'author': commit.get('author', {})  # This has the github_id
-                                            }
-                                            # Check if already in search_results to avoid duplicates
-                                            if not any(r.get('sha') == formatted_commit['sha'] for r in search_results):
-                                                search_results.append(formatted_commit)
-                                except Exception as repo_error:
-                                    logger.debug(f"    Error fetching commits from {repo_full_name}: {repo_error}")
-                                    continue
-                        except Exception as repos_error:
-                            logger.warning(f"  Error fetching repos for {login}: {repos_error}")
                     
                     commits_processed = 0
                     

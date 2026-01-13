@@ -201,21 +201,6 @@ class GitHubClient:
             logger.debug(f"Error fetching user {username}: {e}")
             return None
     
-    def get_user_repos(self, username: str, type: str = "all") -> List[Dict]:
-        """Get public repositories for a user.
-        
-        Args:
-            username: GitHub username
-            type: Type of repos to fetch (all, owner, member)
-        """
-        params = {
-            "type": type,
-            "sort": "updated",
-            "per_page": 100
-        }
-        url = f"{self.base_url}/users/{username}/repos"
-        return self._get_paginated(url, params, max_pages=10)  # Get up to 1000 repos
-    
     def search_commits(self, author: str, since: Optional[datetime] = None, until: Optional[datetime] = None) -> List[Dict]:
         """Search commits by author across all public repos they have access to.
         
@@ -246,7 +231,7 @@ class GitHubClient:
             self.headers["Accept"] = "application/vnd.github.cloak-preview+json"
             self.client.headers.update(self.headers)
             
-            results = self._get_paginated(url, params, max_pages=10)  # Increase to 10 pages (1000 commits) for comprehensive results
+            results = self._get_paginated(url, params, max_pages=3)  # Limit to 3 pages (300 commits) to respect rate limits
             
             # Extract items from search results
             if results and isinstance(results[0], dict) and 'items' in results[0]:

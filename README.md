@@ -1,5 +1,44 @@
 # RealDevs - Team Momentum Analytics
 
+## Introduction
+
+**RealDevs** is a powerful analytics tool designed for project team leads and startup founders who need a quick, daily overview of their team's performance. Whether you're managing a growing engineering team or tracking progress across multiple projects, RealDevs provides the insights you need to spot potential risks, monitor project progress, and compare team member contributions—all at a glance.
+
+### Key Capabilities
+
+- **📊 Daily Performance Overview**: Get an instant snapshot of your team's productivity with comprehensive dashboards that track commits, pull requests, and contributions across all your repositories.
+
+- **🚨 Risk Detection**: Automatically identify potential issues before they become problems—from inactive team members to single points of failure and stale repositories.
+
+- **📈 Progress Monitoring**: Track the momentum of each project with visual analytics, trend indicators, and contribution breakdowns by repository and team member.
+
+- **👥 Team Comparison**: Easily compare progress between team members with detailed contributor rankings, activity metrics, and performance trends.
+
+### Dashboard Overview
+
+**Your Team's Productivity at a Glance**
+
+![Dashboard](./apps/web/src/public/dashboard.png)
+
+The main dashboard provides a comprehensive view of your team's activity, including:
+- Total code commitment trends with visual charts
+- Internal vs external contribution splits
+- Top contributors with performance metrics
+- Daily commit activity over time
+- Risk flags with severity indicators
+- Repository-level contribution breakdowns
+
+**Contributors Analysis**
+
+![Contributors](./apps/web/src/public/contributors.png)
+
+The contributors page offers detailed insights into individual team member performance:
+- Ranked contributor list sorted by average trend
+- Commit and PR statistics for each team member
+- Internal vs external contributor classification
+- Performance trends and momentum scores
+- Quick filtering and sorting options
+
 **Phase 1 MVP**: Local-first GitHub activity tracker with web dashboard. Monitor team momentum, identify risks, and generate weekly recaps — all without surveillance.
 
 ## Features
