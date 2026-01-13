@@ -510,7 +510,7 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-sm text-white mb-3">Commits</p>
                 {processedDailyCommits && processedDailyCommits.length > 0 ? (
-                  <div className="flex-1 min-h-[120px]">
+                  <div className="flex-1 min-h-[108px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={processedDailyCommits}>
                         <defs>
@@ -541,7 +541,7 @@ export default function DashboardPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="flex-1 min-h-[120px] flex items-center justify-center">
+                  <div className="flex-1 min-h-[108px] flex items-center justify-center">
                     <div className="text-center">
                       <Minus className="w-6 h-6 mx-auto mb-1 opacity-50 text-muted-foreground" />
                       <p className="text-xs text-muted-foreground">No trend data</p>
@@ -567,7 +567,7 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
-                <div className="flex-1 min-h-[120px] flex items-center justify-center mb-3">
+                <div className="flex-1 min-h-[108px] flex items-center justify-center mb-3">
                   {pieChartData.some(d => d.value > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -840,7 +840,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {processedDailyCommits && processedDailyCommits.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={270}>
                     <BarChart data={processedDailyCommits}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis 
@@ -871,7 +871,41 @@ export default function DashboardPage() {
                         fill={`hsl(${getAccentColorHsl()})`} 
                         name="Internal" 
                         stackId="commits"
-                        radius={[0, 0, 4, 4]}
+                        shape={(props: any) => {
+                          const { x, y, width, height, payload } = props;
+                          // Check if there's external data for this day
+                          const hasExternal = payload && payload.external > 0;
+                          const r = 4; // corner radius
+                          
+                          if (hasExternal) {
+                            // Only round bottom corners when external data exists
+                            return (
+                              <path
+                                d={`M ${x},${y} 
+                                   L ${x + width},${y} 
+                                   L ${x + width},${y + height - r} 
+                                   Q ${x + width},${y + height} ${x + width - r},${y + height} 
+                                   L ${x + r},${y + height} 
+                                   Q ${x},${y + height} ${x},${y + height - r} 
+                                   Z`}
+                                fill={props.fill}
+                              />
+                            );
+                          } else {
+                            // Round all corners when no external data
+                            return (
+                              <rect
+                                x={x}
+                                y={y}
+                                width={width}
+                                height={height}
+                                rx={r}
+                                ry={r}
+                                fill={props.fill}
+                              />
+                            );
+                          }
+                        }}
                       />
                       <Bar 
                         dataKey="external" 
@@ -883,7 +917,7 @@ export default function DashboardPage() {
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="h-[270px] flex items-center justify-center text-muted-foreground">
                     <div className="text-center">
                       <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
                       <p>No commit data available</p>
@@ -914,8 +948,8 @@ export default function DashboardPage() {
               <CardContent>
                 {sortedRepoContributions && sortedRepoContributions.length > 0 ? (
                   <div className="flex items-start gap-6">
-                    <div className="shrink-0" style={{ width: 200, height: 200 }}>
-                      <PieChart width={200} height={200}>
+                    <div className="shrink-0" style={{ width: 200, height: 180 }}>
+                      <PieChart width={200} height={180}>
                           <defs>
                             {sortedRepoContributions.map((entry, index) => {
                               const opacity = 0.85;
@@ -979,7 +1013,7 @@ export default function DashboardPage() {
                           />
                         </PieChart>
                     </div>
-                    <div className="flex-1 space-y-2 max-h-[200px] overflow-y-auto">
+                    <div className="flex-1 space-y-2 max-h-[180px] overflow-y-auto">
                       {sortedRepoContributions.map((entry, index) => {
                         const color = `hsl(${entry.hue} ${entry.saturation} ${entry.lightness})`;
                         // Handle "External" category specially, otherwise extract repo name
@@ -1009,7 +1043,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="h-[270px] flex items-center justify-center text-muted-foreground">
                     <div className="text-center">
                       <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
                       <p>No contribution data available</p>
