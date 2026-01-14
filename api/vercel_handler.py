@@ -81,7 +81,16 @@ if handler is None:
 
 # Strategy 3: Try to find run.py and import dynamically
 if handler is None:
-    for path in possible_paths:
+    search_paths = [
+        apps_api_path,
+        os.path.join(root_dir, 'apps', 'api'),
+        os.path.join(root_dir, 'api'),
+        current_dir,
+        root_dir,
+    ]
+    for path in search_paths:
+        if not path:
+            continue
         run_py = os.path.join(path, 'run.py')
         if os.path.exists(run_py):
             try:
