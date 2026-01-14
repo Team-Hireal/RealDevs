@@ -1,6 +1,7 @@
 """Vercel serverless function entry point."""
 import os
 import sys
+import traceback
 
 # Get the current file's directory (api/)
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +20,26 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 # Import the Flask app from run.py
-from run import app
+try:
+    from run import app
+except ImportError as e:
+    # If import fails, create a minimal error handler
+    import logging
+    logging.basicConfig(level=logging.ERROR)
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to import Flask app: {e}")
+    logger.error(traceback.format_exc())
+    
+    from flask import Flask, jsonify
+    app = Flask(__name__)
+    
+    @app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+    def error_handler(path):
+        return jsonify({
+            "ok": False,
+            "error": f"Failed to import Flask app: {str(e)}",
+            "traceback": traceback.format_exc()
+        }), 500
 
 # Export app for Vercel Python runtime
 # Vercel will detect this as the WSGI application
