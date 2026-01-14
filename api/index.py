@@ -16,7 +16,13 @@ for path in [apps_api_path, root_dir]:
 
 # Now import - this must happen after path setup
 # Import the Flask app from apps/api/run.py
-from run import app
+try:
+    from run import app
+except ImportError as e:
+    # Fallback: try importing from apps.api.run
+    if apps_api_path not in sys.path:
+        sys.path.insert(0, apps_api_path)
+    from run import app
 
 # Export app for Vercel
 # Vercel automatically detects 'app' as the WSGI application
