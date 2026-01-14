@@ -9,4 +9,3 @@ def health():
         "status": "ok",
         "service": "RealDevs API"
     })
-
