@@ -1,6 +1,12 @@
 """RealDevs API application factory."""
-from flask import Flask, jsonify
-from flask_cors import CORS
+# Import Flask first - this should always work if requirements.txt is installed
+try:
+    from flask import Flask, jsonify
+    from flask_cors import CORS
+except ImportError as e:
+    # If Flask isn't available, we can't create the app
+    # This should never happen if requirements.txt is properly installed
+    raise ImportError(f"Flask is not installed. Error: {e}")
 
 def create_app(config=None):
     """Create and configure Flask application."""
