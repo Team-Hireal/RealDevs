@@ -27,9 +27,15 @@ def create_app(config=None):
     # Initialize database
     db.init_app(app)
     
-    # Create tables
-    with app.app_context():
-        db.create_all()
+    # Create tables (only in development or if explicitly requested)
+    # In production, tables should be created via migrations or init script
+    if app.config.get("FLASK_ENV") == "development":
+        with app.app_context():
+            try:
+                db.create_all()
+            except Exception:
+                # Ignore errors (e.g., tables already exist, no database connection)
+                pass
     
     # Register blueprints
     app.register_blueprint(api_bp, url_prefix='/api')

@@ -133,7 +133,7 @@ export default function DashboardPage() {
     }
   }, [rangeDays, selectedContributor, isCustomRange]);
 
-  const { data: authStatus } = useQuery({
+  const { data: authStatus, isLoading: isLoadingAuth, isSuccess: isAuthStatusSuccess } = useQuery({
     queryKey: ["auth-status"],
     queryFn: () => api.getAuthStatus(),
   });
@@ -545,10 +545,17 @@ export default function DashboardPage() {
   }, [dailyCommitsData, accentColor]);
 
   const shouldShowPatPrompt = useMemo(() => {
-    if (!authStatus) return false;
+    // Don't show if user dismissed it
     if (dismissedPatPrompt) return false;
-    return !authStatus.configured;
-  }, [authStatus, dismissedPatPrompt]);
+    // Wait for auth status to finish loading
+    if (isLoadingAuth) return false;
+    // Only show if query succeeded and we have a response
+    if (isAuthStatusSuccess && authStatus) {
+      return !authStatus.configured;
+    }
+    // Don't show if query hasn't completed yet or failed
+    return false;
+  }, [authStatus, dismissedPatPrompt, isLoadingAuth, isAuthStatusSuccess]);
 
   if (isLoading) {
     return (
@@ -586,16 +593,20 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <p className="font-semibold">
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <p className="font-semibold text-foreground">
                     You can either:
                   </p>
-                  <p>
-                    • **Configure a PAT now** for full analytics and automatic syncing, or<br />
-                    • **Continue without a PAT** with limited GitHub rate limits — you&apos;ll need to manually add users by GitHub username in **Settings → Credentials**.
-                  </p>
+                  <div className="space-y-2">
+                    <p>
+                      <span className="font-semibold text-foreground">Configure a PAT now</span> for full analytics and automatic syncing, or
+                    </p>
+                    <p>
+                      <span className="font-semibold text-foreground">Continue without a PAT</span> with limited GitHub rate limits — you&apos;ll need to manually add users by GitHub username in <span className="font-semibold text-foreground">Settings → Credentials</span>.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                <div className="flex flex-col sm:flex-row gap-2 sm:justify-end pt-2">
                   <Button
                     variant="ghost"
                     className="sm:flex-1"

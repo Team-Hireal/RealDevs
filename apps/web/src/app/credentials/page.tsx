@@ -111,62 +111,16 @@ export default function CredentialsPage() {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       setIsAutoSyncing(true);
+      setAutoSyncStatus("Username validated successfully! Note: Username-only mode can only access public repositories. Please select repositories manually from the list above.");
       
-      // Check if repos are selected
-      const selectedReposData = await queryClient.fetchQuery({
-        queryKey: ["selected-repos"],
-        queryFn: () => api.getSelectedRepos(),
-      });
+      // In username-only mode, we can now list repos but user must manually select them
+      // Invalidate queries to trigger repo list refresh
+      queryClient.invalidateQueries({ queryKey: ["available-repos"] });
       
-      // If no repos selected, auto-select all available repos
-      if (!selectedReposData?.repos || selectedReposData.repos.length === 0) {
-        setAutoSyncStatus("Selecting all available repositories...");
-        
-        try {
-          // Fetch available repos
-          const availableReposData = await queryClient.fetchQuery({
-            queryKey: ["available-repos"],
-            queryFn: () => api.listRepos(),
-          });
-          
-          if (availableReposData?.repos && availableReposData.repos.length > 0) {
-            // Select all repos
-            await api.selectRepos(availableReposData.repos.map(r => r.full_name));
-            queryClient.invalidateQueries({ queryKey: ["selected-repos"] });
-            setAutoSyncStatus(`Selected ${availableReposData.repos.length} public repositories. Starting sync...`);
-            
-            // Wait a bit for repos to be saved
-            await new Promise(resolve => setTimeout(resolve, 500));
-          } else {
-            setAutoSyncStatus("No public repositories found for this user.");
-            setIsAutoSyncing(false);
-            return;
-          }
-        } catch (error) {
-          console.error("Error auto-selecting repos:", error);
-          setAutoSyncStatus("Failed to auto-select repositories. Please select them manually.");
-          setIsAutoSyncing(false);
-          return;
-        }
-      } else {
-        setAutoSyncStatus("Starting sync for all commits...");
-      }
-      
-      // Always trigger sync for "all time" (null = all time) after username setup
-      setAutoSyncStatus("Syncing all commits (this may take a while)...");
-      
-      try {
-        await syncMutation.mutateAsync(null); // null = all time
-        setAutoSyncStatus("Initial sync completed successfully!");
-      } catch (error: any) {
-        setAutoSyncStatus(`Sync failed: ${error.message || "Unknown error"}`);
-      } finally {
-        // Keep status visible for a few seconds, then clear
-        setTimeout(() => {
-          setIsAutoSyncing(false);
-          setAutoSyncStatus("");
-        }, 5000);
-      }
+      setTimeout(() => {
+        setIsAutoSyncing(false);
+        setAutoSyncStatus("");
+      }, 5000);
     },
     onError: (error: any) => {
       const errorMessage = error.message || "Failed to validate username";

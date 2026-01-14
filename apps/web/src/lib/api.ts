@@ -2,7 +2,22 @@
  * API client for RealDevs backend
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+// Use environment variable if set, otherwise:
+// - In browser: use relative path (works for same-domain deployment)
+// - In Node.js (SSR): fallback to localhost for development
+const getApiBase = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL
+  }
+  // In browser, use relative path (works when frontend and backend are on same domain)
+  if (typeof window !== 'undefined') {
+    return '/api'
+  }
+  // In Node.js (SSR), use localhost for development
+  return 'http://localhost:8000/api'
+}
+
+const API_BASE = getApiBase()
 
 export interface ApiError {
   ok: false

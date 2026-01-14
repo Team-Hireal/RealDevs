@@ -46,13 +46,19 @@ class SyncService:
     
     @staticmethod
     def select_repos(repo_full_names: List[str]) -> Dict:
-        """Mark repos as selected for syncing. Removes repos not in the list."""
+        """Mark repos as selected for syncing. Removes repos not in the list.
+        
+        Works in both authenticated (PAT) and unauthenticated (username-only) modes.
+        """
         pat = AuthService.get_stored_pat()
-        if not pat:
-            raise ValueError("No PAT stored")
+        username = AuthService.get_stored_username()
+        
+        if not pat and not username:
+            raise ValueError("No PAT or username stored")
         
         with GitHubClient(pat) as client:
-            all_repos = client.list_repos()
+            # Pass username if in username-only mode
+            all_repos = client.list_repos(username=username if not pat else None)
         
         # Create a lookup
         repo_map = {repo['full_name']: repo for repo in all_repos}
@@ -599,10 +605,18 @@ class SyncService:
         This function tracks ALL contributors to tracked repositories and fetches
         their complete contribution history across GitHub, filtering out commits
         to tracked repos to show only external work.
+        
+        Requires PAT authentication for GitHub API access.
         """
         pat = AuthService.get_stored_pat()
         if not pat:
-            raise ValueError("No PAT stored")
+            logger.info("Skipping external commits sync: PAT required (username-only mode)")
+            return {
+                "ok": True,
+                "message": "External commits sync skipped: PAT authentication required",
+                "external_commits_synced": 0,
+                "skipped_reason": "username_only_mode"
+            }
         
         # Get ALL unique contributors from tracked repositories
         # This automatically includes everyone who has contributed to your projects
@@ -890,10 +904,18 @@ class SyncService:
         
         Args:
             range_days: Number of days to sync. If None, syncs all time (from 2008-01-01).
+        
+        Requires PAT authentication for GitHub API access.
         """
         pat = AuthService.get_stored_pat()
         if not pat:
-            raise ValueError("No PAT stored")
+            logger.info("Skipping external contributors sync: PAT required (username-only mode)")
+            return {
+                "ok": True,
+                "message": "External contributors sync skipped: PAT authentication required",
+                "synced_contributors": 0,
+                "skipped_reason": "username_only_mode"
+            }
         
         # Get external contributors
         external_contributors = ExternalContributor.query.filter_by(is_active=True).all()

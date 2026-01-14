@@ -8,18 +8,43 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 # Get the project root directory (one level up from api/)
 root_dir = os.path.dirname(current_dir)
 
-# Try multiple path strategies for Vercel compatibility
-possible_paths = [
-    os.path.join(root_dir, 'apps', 'api'),  # Standard monorepo structure
-    os.path.join(root_dir, 'api'),          # If apps/api is flattened
-    current_dir,                            # If handler is in apps/api
-    root_dir,                               # Root directory
-]
+# On Vercel, files might be in different locations
+# Try to find apps/api directory by walking up from current location
+def find_apps_api():
+    """Find the apps/api directory by searching from current location."""
+    search_dirs = [
+        os.path.join(root_dir, 'apps', 'api'),  # Standard monorepo
+        os.path.join(root_dir, 'api'),          # Flattened
+        current_dir,                            # Current directory
+        root_dir,                               # Root
+    ]
+    
+    # Also try walking up directories
+    check_dir = current_dir
+    for _ in range(5):  # Don't go too far up
+        apps_api = os.path.join(check_dir, 'apps', 'api')
+        if os.path.exists(apps_api) and os.path.exists(os.path.join(apps_api, 'run.py')):
+            return apps_api
+        check_dir = os.path.dirname(check_dir)
+    
+    # Return first existing path
+    for path in search_dirs:
+        if os.path.exists(path):
+            return path
+    
+    return None
 
-# Add all possible paths to sys.path
-for path in possible_paths:
+# Find and add apps/api to path
+apps_api_path = find_apps_api()
+if apps_api_path:
+    abs_path = os.path.abspath(apps_api_path)
+    if abs_path not in sys.path:
+        sys.path.insert(0, abs_path)
+
+# Also add root and current dir
+for path in [root_dir, current_dir]:
     abs_path = os.path.abspath(path)
-    if abs_path not in sys.path and os.path.exists(abs_path):
+    if abs_path not in sys.path:
         sys.path.insert(0, abs_path)
 
 # Debug: Log paths (will appear in Vercel function logs)
