@@ -75,65 +75,62 @@ logger.info(f"Apps API path: {apps_api_path}")
 logger.info(f"Python path: {sys.path[:5]}...")  # First 5 entries
 
 # Try to find and import the Flask app
-handler = None
+# Import app directly - Vercel expects 'app' to be the Flask WSGI application
 import_error = None
 
 # Strategy 1: Direct import from run (if apps/api is in path)
 try:
     from run import app
-    handler = app
     logger.info("✅ Successfully imported Flask app from 'run'")
 except ImportError as e:
     logger.warning(f"Import from 'run' failed: {str(e)}")
     import_error = e
-
-# Strategy 2: Import from apps.api.run
-if handler is None:
+    
+    # Strategy 2: Import from apps.api.run
     try:
         from apps.api.run import app
-        handler = app
         logger.info("✅ Successfully imported Flask app from 'apps.api.run'")
-    except ImportError as e:
-        logger.warning(f"Import from 'apps.api.run' failed: {str(e)}")
-        import_error = e
-
-# Strategy 3: Try to find run.py and import dynamically
-if handler is None:
-    search_paths = [
-        apps_api_path,
-        os.path.join(root_dir, 'apps', 'api'),
-        os.path.join(root_dir, 'api'),
-        current_dir,
-        root_dir,
-    ]
-    for path in search_paths:
-        if not path:
-            continue
-        run_py = os.path.join(path, 'run.py')
-        if os.path.exists(run_py):
-            try:
-                # Add the directory to path and try importing
-                run_dir = os.path.dirname(run_py)
-                if run_dir not in sys.path:
-                    sys.path.insert(0, run_dir)
-                from run import app
-                handler = app
-                logger.info(f"✅ Successfully imported Flask app from {run_py}")
-                break
-            except ImportError as e:
-                logger.warning(f"Failed to import from {run_py}: {str(e)}")
+        import_error = None
+    except ImportError as e2:
+        logger.warning(f"Import from 'apps.api.run' failed: {str(e2)}")
+        import_error = e2
+        
+        # Strategy 3: Try to find run.py and import dynamically
+        search_paths = [
+            apps_api_path,
+            os.path.join(root_dir, 'apps', 'api'),
+            os.path.join(root_dir, 'api'),
+            current_dir,
+            root_dir,
+        ]
+        for path in search_paths:
+            if not path:
                 continue
+            run_py = os.path.join(path, 'run.py')
+            if os.path.exists(run_py):
+                try:
+                    # Add the directory to path and try importing
+                    run_dir = os.path.dirname(run_py)
+                    if run_dir not in sys.path:
+                        sys.path.insert(0, run_dir)
+                    from run import app
+                    logger.info(f"✅ Successfully imported Flask app from {run_py}")
+                    import_error = None
+                    break
+                except ImportError as e3:
+                    logger.warning(f"Failed to import from {run_py}: {str(e3)}")
+                    continue
 
 # If all imports failed, create an error handler
-if handler is None:
+if import_error is not None:
     logger.error("❌ All import attempts failed!")
     logger.error(f"Last error: {str(import_error)}")
     logger.error(traceback.format_exc())
     
     from flask import Flask, jsonify
-    error_app = Flask(__name__)
+    app = Flask(__name__)
     
-    @error_app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+    @app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
     def error_handler(path):
         # List all files in possible paths for debugging
         debug_info = {
@@ -175,26 +172,15 @@ if handler is None:
             "error": f"Failed to initialize Flask app: {str(import_error)}",
             "debug": debug_info
         }), 500
-    
-    handler = error_app
 
-if handler:
+# Log app info if available
+try:
     logger.info("✅ Handler initialized successfully")
-    # Log app info if available
-    try:
-        logger.info(f"Flask app name: {handler.name}")
-        logger.info(f"Flask app routes: {len(list(handler.url_map.iter_rules()))}")
-    except:
-        pass
-else:
-    logger.error("❌ Handler initialization failed")
-    # Create a minimal error handler if all else fails
-    from flask import Flask, jsonify
-    handler = Flask(__name__)
-    @handler.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
-    def error_handler(path):
-        return jsonify({"ok": False, "error": "Handler initialization failed"}), 500
+    logger.info(f"Flask app name: {app.name}")
+    logger.info(f"Flask app routes: {len(list(app.url_map.iter_rules()))}")
+except Exception as e:
+    logger.warning(f"Could not log app info: {e}")
 
-# Export handler for Vercel Python runtime
+# Export app for Vercel Python runtime
 # Vercel will detect this as the WSGI application
-app = handler
+# The 'app' variable must be a Flask instance at module level
