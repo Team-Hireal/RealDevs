@@ -10,28 +10,15 @@ root_dir = os.path.dirname(current_dir)
 # Path to apps/api where the Flask app lives
 apps_api_path = os.path.join(root_dir, 'apps', 'api')
 
-# Add paths to sys.path in the correct order
-paths_to_add = [
-    apps_api_path,  # apps/api - where run.py is
-    root_dir,       # project root
-    current_dir     # api/ directory
-]
-
-for path in paths_to_add:
-    if os.path.exists(path):
-        abs_path = os.path.abspath(path)
-        if abs_path not in sys.path:
-            sys.path.insert(0, abs_path)
+# Add paths to sys.path - Vercel needs absolute paths
+if apps_api_path not in sys.path:
+    sys.path.insert(0, apps_api_path)
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
 
 # Now import the Flask app from apps/api/run.py
-# Change to apps/api directory temporarily to ensure relative imports work
-original_cwd = os.getcwd()
-try:
-    if os.path.exists(apps_api_path):
-        os.chdir(apps_api_path)
-    from run import app
-finally:
-    os.chdir(original_cwd)
+# Use absolute import path
+from run import app
 
 # Export app for Vercel
 # Vercel automatically detects 'app' as the WSGI application
