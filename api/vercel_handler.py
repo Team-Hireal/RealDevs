@@ -3,6 +3,16 @@ import os
 import sys
 import traceback
 
+# CRITICAL: Verify dependencies are installed
+try:
+    import flask
+    import flask_cors
+    import sqlalchemy
+    DEPENDENCIES_OK = True
+except ImportError as e:
+    DEPENDENCIES_OK = False
+    MISSING_DEP = str(e)
+
 # Get the current file's directory (api/)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # Get the project root directory (one level up from api/)
@@ -51,9 +61,17 @@ for path in [root_dir, current_dir]:
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Log dependency status
+if not DEPENDENCIES_OK:
+    logger.error(f"❌ CRITICAL: Dependencies not installed! Missing: {MISSING_DEP}")
+else:
+    logger.info(f"✅ Dependencies verified: Flask {flask.__version__}, SQLAlchemy {sqlalchemy.__version__}")
+
 logger.info(f"Handler file: {__file__}")
 logger.info(f"Current dir: {current_dir}")
 logger.info(f"Root dir: {root_dir}")
+logger.info(f"Apps API path: {apps_api_path}")
 logger.info(f"Python path: {sys.path[:5]}...")  # First 5 entries
 
 # Try to find and import the Flask app
@@ -120,12 +138,17 @@ if handler is None:
         # List all files in possible paths for debugging
         debug_info = {
             "error": str(import_error),
+            "dependencies_ok": DEPENDENCIES_OK,
             "handler_file": __file__,
             "current_dir": current_dir,
             "root_dir": root_dir,
+            "apps_api_path": apps_api_path,
             "possible_paths": {},
             "sys_path": sys.path[:10],  # First 10 entries
         }
+        
+        if not DEPENDENCIES_OK:
+            debug_info["missing_dependency"] = MISSING_DEP
         
         # Check what files exist in each path
         for path_name, path_val in [
@@ -155,5 +178,13 @@ if handler is None:
     
     handler = error_app
 
-logger.info("Handler initialized successfully" if handler else "Handler initialization failed")
-
+if handler:
+    logger.info("✅ Handler initialized successfully")
+    # Log app info if available
+    try:
+        logger.info(f"Flask app name: {handler.name}")
+        logger.info(f"Flask app routes: {len(list(handler.url_map.iter_rules()))}")
+    except:
+        pass
+else:
+    logger.error("❌ Handler initialization failed")
