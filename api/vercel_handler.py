@@ -188,3 +188,13 @@ if handler:
         pass
 else:
     logger.error("❌ Handler initialization failed")
+    # Create a minimal error handler if all else fails
+    from flask import Flask, jsonify
+    handler = Flask(__name__)
+    @handler.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+    def error_handler(path):
+        return jsonify({"ok": False, "error": "Handler initialization failed"}), 500
+
+# Export handler for Vercel Python runtime
+# Vercel will detect this as the WSGI application
+app = handler
