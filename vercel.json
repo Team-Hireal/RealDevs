@@ -2,21 +2,16 @@
   "version": 2,
   "builds": [
     {
-      "src": "apps/api/vercel_handler.py",
+      "src": "api/vercel_handler.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "apps/api/vercel_handler.py"
+      "dest": "api/vercel_handler.py"
     }
   ],
-  "functions": {
-    "apps/api/vercel_handler.py": {
-      "maxDuration": 60
-    }
-  },
   "env": {
     "PYTHON_VERSION": "3.12"
   }
