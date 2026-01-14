@@ -48,19 +48,33 @@ def create_app(config=None):
         # Database initialization failed - continue without it
         pass
     
-    # Register blueprints
+    # Register blueprints - use lazy import to avoid import-time errors
     try:
+        # Import blueprint first
         from app.api import api_bp
+        # Then try to register it
         app.register_blueprint(api_bp, url_prefix='/api')
     except Exception as e:
         # If blueprint registration fails, add a basic health endpoint
+        import traceback
         @app.route('/api/health', methods=['GET'])
         def health_fallback():
             return jsonify({
                 "status": "ok",
                 "service": "RealDevs API",
-                "note": "Running in fallback mode - some features may be unavailable"
+                "note": "Running in fallback mode",
+                "error": str(e),
+                "traceback": traceback.format_exc()
             })
+        
+        # Also add a catch-all for other API routes
+        @app.route('/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+        def api_fallback(path):
+            return jsonify({
+                "ok": False,
+                "error": "API blueprint not available",
+                "path": path
+            }), 503
     
     return app
 
