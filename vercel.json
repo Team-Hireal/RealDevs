@@ -2,21 +2,22 @@
   "version": 2,
   "builds": [
     {
+      "src": "apps/web/package.json",
+      "use": "@vercel/next"
+    },
+    {
       "src": "app.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb"
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "app.py"
+      "dest": "/app.py"
     },
     {
       "src": "/(.*)",
-      "dest": "app.py"
+      "dest": "/apps/web/$1"
     }
   ],
   "env": {

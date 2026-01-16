@@ -1,0 +1,19 @@
+{
+  "name": "realdevs-monorepo",
+  "version": "1.0.0",
+  "description": "RealDevs - Team Momentum Analytics",
+  "private": true,
+  "scripts": {
+    "vercel-build": "cd apps/web && npm install && npm run build",
+    "build": "npm install --prefix apps/web && npm run build --prefix apps/web",
+    "dev:web": "npm run dev --prefix apps/web",
+    "dev:api": "cd apps/api && python run.py"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.x"
+  }
+}
+

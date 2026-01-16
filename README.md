@@ -186,9 +186,20 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api
 - ✅ "Delete & Reset" button wipes all data
 - ⚠️ For production deployment, implement proper secrets management
 
-## Deployment (Self-Host)
+## Deployment
 
-See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for hosting options.
+### Vercel Deployment (Recommended)
+
+Deploy to Vercel in minutes! See:
+- **[Quick Start Guide](./VERCEL_QUICKSTART.md)** - Fast deployment steps
+- **[Deployment Options](./docs/VERCEL_DEPLOYMENT_OPTIONS.md)** - Choose the right approach
+- **[Complete Guide](./VERCEL_DEPLOYMENT_GUIDE.md)** - Detailed documentation
+
+Your project is pre-configured for Vercel deployment with Flask backend + Next.js frontend on the same domain.
+
+### Self-Hosting
+
+See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for self-hosting options.
 
 **Warning**: Phase 1 is designed for local-first use. Hosting PAT flow requires additional security measures.
 
