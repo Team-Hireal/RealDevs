@@ -1,11 +1,11 @@
-flask==3.1.2
-flask-cors>=5.0
-flask-sqlalchemy>=3.1
-sqlalchemy>=2,<3
-alembic>=1.14
-pydantic>=2,<3
-cryptography>=42
-httpx>=0.27
-python-dotenv>=1
-psycopg[binary]>=3
+Flask==3.1.2
+Flask-CORS==5.0.0
+Flask-SQLAlchemy==3.1.1
+SQLAlchemy==2.0.36
+alembic==1.14.0
+pydantic==2.10.5
+httpx==0.28.1
+cryptography==44.0.0
+python-dotenv==1.0.1
+psycopg2-binary==2.9.9
 
