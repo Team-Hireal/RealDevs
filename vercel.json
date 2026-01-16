@@ -20,6 +20,11 @@
       "dest": "/apps/web/$1"
     }
   ],
+  "functions": {
+    "app.py": {
+      "maxDuration": 60
+    }
+  },
   "env": {
     "PYTHONPATH": "."
   }
