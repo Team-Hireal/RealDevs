@@ -1,7 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // No need for output config on Vercel with @vercel/next
+  // Export as static site to avoid ISR functions counting against Vercel limit
+  output: 'export',
+  // Disable image optimization for static export
+  images: {
+    unoptimized: true,
+  },
   // API rewrites only for local development
   async rewrites() {
     // In production (Vercel), API routes are handled by Flask via vercel.json routes

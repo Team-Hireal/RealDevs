@@ -114,7 +114,7 @@ export default function DashboardPage() {
   const [dismissedPatPrompt, setDismissedPatPrompt] = useState(false);
   const customDatePopupRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
-  const { accentColor } = useTheme();
+  const { accentColor, customColorHsl } = useTheme();
   const router = useRouter();
 
   // Save dashboard state to localStorage whenever it changes
@@ -391,17 +391,21 @@ export default function DashboardPage() {
 
   // Get accent color HSL value for gradients
   const getAccentColorHsl = () => {
+    if (accentColor === "customize") {
+      return customColorHsl;
+    }
+    
     const accentColors: Record<string, string> = {
-      gold: "45 65% 52%",
-      "metallic-pink": "335 45% 58%",
-      bronze: "28 55% 42%",
-      copper: "18 65% 48%",
-      platinum: "200 12% 80%",
-      steel: "210 20% 55%",
-      "rose-gold": "15 45% 60%",
-      titanium: "195 18% 65%",
+      yellow: "50 55% 62%",
+      cyan: "180 45% 58%",
+      "silver-blue": "210 35% 65%",
+      "orange-gold": "35 60% 55%",
+      olive: "80 30% 55%",
+      purple: "280 45% 60%",
+      pink: "340 50% 65%",
+      customize: customColorHsl,
     };
-    return accentColors[accentColor] || accentColors.gold;
+    return accentColors[accentColor] || accentColors.yellow;
   };
 
   // Process daily commits data to fill in missing dates
@@ -493,8 +497,8 @@ export default function DashboardPage() {
     const externalData = internalExternalSplit.find(s => s.category === "External");
     const totalExternalCommits = externalData?.count || externalCommitsFromRepos;
     
-    // Get accent color HSL values
-    const baseHsl = getAccentColorHsl();
+    // Get accent color HSL values (use custom color if customize is selected)
+    const baseHsl = accentColor === "customize" ? customColorHsl : getAccentColorHsl();
     const baseHue = parseInt(baseHsl.split(' ')[0]);
     const baseSaturation = parseInt(baseHsl.split(' ')[1].replace('%', ''));
     const baseLightness = baseHsl.split(' ')[2];
@@ -542,7 +546,7 @@ export default function DashboardPage() {
     
     // Sort by value descending (External will be included in sort)
     return result.sort((a, b) => b.value - a.value);
-  }, [dailyCommitsData, accentColor]);
+  }, [dailyCommitsData, accentColor, customColorHsl]);
 
   const shouldShowPatPrompt = useMemo(() => {
     // Don't show if user dismissed it
