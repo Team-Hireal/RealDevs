@@ -4,6 +4,24 @@
     {
       "src": "apps/web/package.json",
       "use": "@vercel/next"
+    },
+    {
+      "src": "app.py",
+      "use": "@vercel/python"
     }
-  ]
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/app.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/apps/web/$1"
+    }
+  ],
+  "env": {
+    "PYTHONPATH": "."
+  }
 }
+

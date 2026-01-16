@@ -1,6 +1,8 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import os
+import sys
+from urllib.parse import urlparse
 
 
 class handler(BaseHTTPRequestHandler):
@@ -52,36 +54,43 @@ class handler(BaseHTTPRequestHandler):
                 
                 user_data = response.json()
                 
-                # Store username in database
+                # Store username in database using raw SQL
                 try:
                     import psycopg2
                     
                     # Get database URL from environment
-                    database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+                    database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
                     
                     if database_url:
-                        # Convert postgres:// to postgresql:// if needed
-                        if database_url.startswith("postgres://"):
-                            database_url = database_url.replace("postgres://", "postgresql://", 1)
+                        # Parse connection string
+                        result = urlparse(database_url)
                         
                         # Connect to database
-                        conn = psycopg2.connect(database_url)
+                        conn = psycopg2.connect(
+                            database=result.path[1:],
+                            user=result.username,
+                            password=result.password,
+                            host=result.hostname,
+                            port=result.port,
+                            sslmode='require'
+                        )
+                        
                         cursor = conn.cursor()
                         
                         try:
-                            # Store username in settings (upsert)
-                            cursor.execute("""
-                                INSERT INTO settings (key, value, created_at, updated_at)
-                                VALUES ('github_username', %s, NOW(), NOW())
-                                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-                            """, (username,))
+                            # Store username in settings
+                            cursor.execute(
+                                "INSERT INTO settings (key, value, created_at, updated_at) VALUES (%s, %s, NOW(), NOW()) "
+                                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                                ('github_username', username)
+                            )
                             
                             # Store auth mode
-                            cursor.execute("""
-                                INSERT INTO settings (key, value, created_at, updated_at)
-                                VALUES ('auth_mode', 'username', NOW(), NOW())
-                                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-                            """)
+                            cursor.execute(
+                                "INSERT INTO settings (key, value, created_at, updated_at) VALUES (%s, %s, NOW(), NOW()) "
+                                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                                ('auth_mode', 'username')
+                            )
                             
                             conn.commit()
                         finally:
@@ -89,7 +98,7 @@ class handler(BaseHTTPRequestHandler):
                             conn.close()
                 except Exception as db_error:
                     # If database fails, still return success but log the error
-                    print(f"Database error: {db_error}")
+                    print(f"Database error: {db_error}", file=sys.stderr)
                 
                 # Return success response
                 payload = {

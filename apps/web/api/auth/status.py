@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import os
+import sys
 
 
 class handler(BaseHTTPRequestHandler):
@@ -10,20 +11,28 @@ class handler(BaseHTTPRequestHandler):
             configured = False
             user_info = None
             
-            # Check database for authentication
+            # Check database for authentication using raw SQL
             try:
                 import psycopg2
+                from urllib.parse import urlparse
                 
                 # Get database URL from environment
-                database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+                database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
                 
                 if database_url:
-                    # Convert postgres:// to postgresql:// if needed
-                    if database_url.startswith("postgres://"):
-                        database_url = database_url.replace("postgres://", "postgresql://", 1)
+                    # Parse connection string
+                    result = urlparse(database_url)
                     
                     # Connect to database
-                    conn = psycopg2.connect(database_url)
+                    conn = psycopg2.connect(
+                        database=result.path[1:],
+                        user=result.username,
+                        password=result.password,
+                        host=result.hostname,
+                        port=result.port,
+                        sslmode='require'
+                    )
+                    
                     cursor = conn.cursor()
                     
                     try:
@@ -44,11 +53,13 @@ class handler(BaseHTTPRequestHandler):
                             
                             if username_row and username_row[0]:
                                 configured = True
+                                username = username_row[0]
+                                
                                 # Fetch user info from GitHub
                                 import httpx
                                 try:
                                     response = httpx.get(
-                                        f"https://api.github.com/users/{username_row[0]}",
+                                        f"https://api.github.com/users/{username}",
                                         headers={
                                             "Accept": "application/vnd.github+json",
                                             "X-GitHub-Api-Version": "2022-11-28"
@@ -69,8 +80,7 @@ class handler(BaseHTTPRequestHandler):
                         cursor.close()
                         conn.close()
             except Exception as db_error:
-                # Database not configured or error - return not configured
-                pass
+                print(f"Database error: {db_error}", file=sys.stderr)
             
             payload = {
                 "ok": True,
@@ -80,13 +90,13 @@ class handler(BaseHTTPRequestHandler):
             if user_info:
                 payload["user"] = user_info
             
-        body = json.dumps(payload).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
             self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(body)
+            self.end_headers()
+            self.wfile.write(body)
             
         except Exception as e:
             payload = {

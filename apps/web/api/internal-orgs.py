@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import os
+from urllib.parse import urlparse
 
 
 class handler(BaseHTTPRequestHandler):
@@ -10,20 +11,27 @@ class handler(BaseHTTPRequestHandler):
             organizations = []
             repos = []
             
-            # Get configuration from database
+            # Get configuration from database using raw SQL
             try:
                 import psycopg2
                 
                 # Get database URL from environment
-                database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+                database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
                 
                 if database_url:
-                    # Convert postgres:// to postgresql:// if needed
-                    if database_url.startswith("postgres://"):
-                        database_url = database_url.replace("postgres://", "postgresql://", 1)
+                    # Parse connection string
+                    result = urlparse(database_url)
                     
                     # Connect to database
-                    conn = psycopg2.connect(database_url)
+                    conn = psycopg2.connect(
+                        database=result.path[1:],
+                        user=result.username,
+                        password=result.password,
+                        host=result.hostname,
+                        port=result.port,
+                        sslmode='require'
+                    )
+                    
                     cursor = conn.cursor()
                     
                     try:
@@ -42,32 +50,32 @@ class handler(BaseHTTPRequestHandler):
                         cursor.close()
                         conn.close()
             except Exception as db_error:
-                print(f"Database error: {db_error}")
+                print(f"Database error: {db_error}", file=sys.stderr)
             
-        payload = {
+            payload = {
                 "organizations": organizations,
                 "repos": repos
-        }
-        body = json.dumps(payload).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(body)
-    
+            }
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+            
         except Exception as e:
-        payload = {
+            payload = {
                 "ok": False,
                 "error": f"Internal server error: {str(e)}"
-        }
-        body = json.dumps(payload).encode("utf-8")
+            }
+            body = json.dumps(payload).encode("utf-8")
             self.send_response(500)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(body)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
     
     def do_POST(self):
         """Update internal organizations and repos configuration in database."""
@@ -96,36 +104,43 @@ class handler(BaseHTTPRequestHandler):
                 self._send_response(400, payload)
                 return
             
-            # Update configuration in database
+            # Update configuration in database using raw SQL
             try:
                 import psycopg2
                 
                 # Get database URL from environment
-                database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+                database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
                 
                 if database_url:
-                    # Convert postgres:// to postgresql:// if needed
-                    if database_url.startswith("postgres://"):
-                        database_url = database_url.replace("postgres://", "postgresql://", 1)
+                    # Parse connection string
+                    result = urlparse(database_url)
                     
                     # Connect to database
-                    conn = psycopg2.connect(database_url)
+                    conn = psycopg2.connect(
+                        database=result.path[1:],
+                        user=result.username,
+                        password=result.password,
+                        host=result.hostname,
+                        port=result.port,
+                        sslmode='require'
+                    )
+                    
                     cursor = conn.cursor()
                     
                     try:
-                        # Update internal organizations setting (upsert)
-                        cursor.execute("""
-                            INSERT INTO settings (key, value, created_at, updated_at)
-                            VALUES ('internal_organizations', %s, NOW(), NOW())
-                            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-                        """, (json.dumps(organizations),))
+                        # Update internal organizations setting
+                        cursor.execute(
+                            "INSERT INTO settings (key, value, created_at, updated_at) VALUES (%s, %s, NOW(), NOW()) "
+                            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                            ('internal_organizations', json.dumps(organizations))
+                        )
                         
-                        # Update internal repos setting (upsert)
-                        cursor.execute("""
-                            INSERT INTO settings (key, value, created_at, updated_at)
-                            VALUES ('internal_repos', %s, NOW(), NOW())
-                            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-                        """, (json.dumps(repos),))
+                        # Update internal repos setting
+                        cursor.execute(
+                            "INSERT INTO settings (key, value, created_at, updated_at) VALUES (%s, %s, NOW(), NOW()) "
+                            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                            ('internal_repos', json.dumps(repos))
+                        )
                         
                         conn.commit()
                     finally:
@@ -140,7 +155,7 @@ class handler(BaseHTTPRequestHandler):
                     return
                     
             except Exception as db_error:
-                print(f"Database error: {db_error}")
+                print(f"Database error: {db_error}", file=sys.stderr)
                 payload = {
                     "ok": False,
                     "error": f"Failed to update internal organizations: {str(db_error)}"
@@ -174,7 +189,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-
+    
     def _send_response(self, status_code, payload):
         """Helper to send JSON response."""
         body = json.dumps(payload).encode("utf-8")

@@ -153,21 +153,21 @@ class ApiClient {
   }
 
   async submitPat(pat: string, storeMode: 'encrypted' | 'memory' = 'encrypted'): Promise<AuthResponse> {
-    return this.request<AuthResponse>('/auth_pat', {
+    return this.request<AuthResponse>('/auth/pat', {
       method: 'POST',
       body: JSON.stringify({ pat, store_mode: storeMode }),
     })
   }
 
   async submitUsername(username: string): Promise<AuthResponse> {
-    return this.request<AuthResponse>('/auth_username', {
+    return this.request<AuthResponse>('/auth/username', {
       method: 'POST',
       body: JSON.stringify({ username }),
     })
   }
 
   async getAuthStatus() {
-    return this.request<{ ok: boolean; configured: boolean; user?: UserInfo }>('/auth_status')
+    return this.request<{ ok: boolean; configured: boolean; user?: UserInfo }>('/auth/status')
   }
 
   async listRepos() {
@@ -245,11 +245,11 @@ class ApiClient {
   }
 
   async getTeamMembers() {
-    return this.request<{ members: TeamMember[] }>('/team_members')
+    return this.request<{ members: TeamMember[] }>('/team-members')
   }
 
   async updateTeamMembers(githubLogins: string[]) {
-    return this.request<{ ok: boolean; message: string }>('/team_members', {
+    return this.request<{ ok: boolean; message: string }>('/team-members', {
       method: 'POST',
       body: JSON.stringify({ github_logins: githubLogins }),
     })
@@ -273,22 +273,22 @@ class ApiClient {
   }
 
   async getInternalOrgs() {
-    return this.request<InternalOrgsConfig>('/internal_orgs')
+    return this.request<InternalOrgsConfig>('/internal-orgs')
   }
 
   async updateInternalOrgs(organizations: string[], repos: string[] = []) {
-    return this.request<{ ok: boolean; message: string }>('/internal_orgs', {
+    return this.request<{ ok: boolean; message: string }>('/internal-orgs', {
       method: 'POST',
       body: JSON.stringify({ organizations, repos }),
     })
   }
 
   async getExternalContributors() {
-    return this.request<{ contributors: ExternalContributor[] }>('/external_contributors')
+    return this.request<{ contributors: ExternalContributor[] }>('/external-contributors')
   }
 
   async updateExternalContributors(githubLogins: string[]) {
-    return this.request<{ ok: boolean; message: string }>('/external_contributors', {
+    return this.request<{ ok: boolean; message: string }>('/external-contributors', {
       method: 'POST',
       body: JSON.stringify({ github_logins: githubLogins }),
     })

@@ -6,7 +6,6 @@
 ✅ **405 error** - Created missing `/api/auth/username` endpoint  
 ✅ **Database connectivity** - All endpoints now use your Supabase database  
 ✅ **Build optimization** - Converted Next.js to static export  
-✅ **Import errors** - Fixed "No module named 'app'" by using raw SQL  
 
 ## What You Need to Do (3 Steps)
 
@@ -27,13 +26,13 @@ Success. No rows returned
 ### Step 2: Deploy Your Changes (3 minutes)
 
 ```bash
-# Commit the fully fixed code
+# Commit the optimized code
 git add .
-git commit -m "Fix: Use raw SQL to resolve all serverless import issues"
+git commit -m "Fix: Optimize deployment - reduce function count, add database connectivity"
 git push origin main
 ```
 
-Wait for Vercel to redeploy (~1-2 minutes). Watch at:
+Wait for Vercel to redeploy (~3 minutes). Watch at:
 https://vercel.com/dashboard
 
 ### Step 3: Test Everything Works! (1 minute)

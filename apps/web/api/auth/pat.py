@@ -1,6 +1,8 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import os
+import sys
+from urllib.parse import urlparse
 
 
 class handler(BaseHTTPRequestHandler):
@@ -54,7 +56,7 @@ class handler(BaseHTTPRequestHandler):
                 
                 user_data = response.json()
                 
-                # Store PAT in database
+                # Store PAT in database using raw SQL
                 try:
                     import psycopg2
                     from cryptography.fernet import Fernet
@@ -62,41 +64,48 @@ class handler(BaseHTTPRequestHandler):
                     import hashlib
                     
                     # Get database URL from environment
-                    database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+                    database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
                     
                     if database_url:
-                        # Convert postgres:// to postgresql:// if needed
-                        if database_url.startswith("postgres://"):
-                            database_url = database_url.replace("postgres://", "postgresql://", 1)
-                        
                         # Encrypt the PAT
                         secret_key = os.getenv("HIDEVS_SECRET_KEY", "dev-secret-change-in-production")
-                        # Derive a valid Fernet key from the secret
+                        # Create a Fernet key from the secret
                         key = base64.urlsafe_b64encode(hashlib.sha256(secret_key.encode()).digest())
-                        fernet = Fernet(key)
-                        encrypted_pat = fernet.encrypt(pat.encode()).decode()
+                        f = Fernet(key)
+                        encrypted_pat = f.encrypt(pat.encode()).decode()
+                        
+                        # Parse connection string
+                        result = urlparse(database_url)
                         
                         # Connect to database
-                        conn = psycopg2.connect(database_url)
+                        conn = psycopg2.connect(
+                            database=result.path[1:],
+                            user=result.username,
+                            password=result.password,
+                            host=result.hostname,
+                            port=result.port,
+                            sslmode='require'
+                        )
+                        
                         cursor = conn.cursor()
                         
                         try:
                             # Delete existing tokens
                             cursor.execute("DELETE FROM auth_tokens")
                             
-                            # Insert new token
-                            cursor.execute("""
-                                INSERT INTO auth_tokens 
-                                (encrypted_token, github_user_login, github_user_id, store_mode, created_at, updated_at)
-                                VALUES (%s, %s, %s, %s, NOW(), NOW())
-                            """, (encrypted_pat, user_data.get("login"), user_data.get("id"), store_mode))
+                            # Create new token
+                            cursor.execute(
+                                "INSERT INTO auth_tokens (encrypted_token, github_user_login, github_user_id, store_mode, created_at, updated_at) "
+                                "VALUES (%s, %s, %s, %s, NOW(), NOW())",
+                                (encrypted_pat, user_data.get("login"), user_data.get("id"), store_mode)
+                            )
                             
                             # Update auth mode setting
-                            cursor.execute("""
-                                INSERT INTO settings (key, value, created_at, updated_at)
-                                VALUES ('auth_mode', 'pat', NOW(), NOW())
-                                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-                            """)
+                            cursor.execute(
+                                "INSERT INTO settings (key, value, created_at, updated_at) VALUES (%s, %s, NOW(), NOW()) "
+                                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                                ('auth_mode', 'pat')
+                            )
                             
                             # Clear username setting if it exists
                             cursor.execute("DELETE FROM settings WHERE key = 'github_username'")
@@ -105,16 +114,8 @@ class handler(BaseHTTPRequestHandler):
                         finally:
                             cursor.close()
                             conn.close()
-                    else:
-                        payload = {
-                            "ok": False,
-                            "error": "Database not configured"
-                        }
-                        self._send_response(500, payload)
-                        return
-                        
                 except Exception as db_error:
-                    print(f"Database error: {db_error}")
+                    print(f"Database error: {db_error}", file=sys.stderr)
                     payload = {
                         "ok": False,
                         "error": f"Failed to store PAT: {str(db_error)}"
@@ -123,8 +124,8 @@ class handler(BaseHTTPRequestHandler):
                     return
                 
                 # Return success response
-        payload = {
-            "ok": True,
+                payload = {
+                    "ok": True,
                     "user": {
                         "login": user_data.get("login"),
                         "id": user_data.get("id"),
@@ -161,7 +162,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-
+    
     def _send_response(self, status_code, payload):
         """Helper to send JSON response."""
         body = json.dumps(payload).encode("utf-8")
