@@ -561,11 +561,11 @@ export default function DashboardPage() {
     return (
       <div className="flex h-screen bg-background">
         <Navigation />
-        <main className="flex-1 p-8 overflow-auto">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
           <div className="max-w-7xl mx-auto">
-            <div className="space-y-6">
-              <div className="h-12 bg-[hsl(0_0%_8%)] rounded-lg animate-pulse" />
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="h-10 sm:h-12 bg-[hsl(0_0%_8%)] rounded-lg animate-pulse" />
+              <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                 {[1, 2, 3, 4].map((i) => (
                   <div key={i} className="h-40 bg-[hsl(0_0%_8%)] rounded-lg animate-pulse" />
                 ))}
@@ -630,23 +630,24 @@ export default function DashboardPage() {
       <div className="flex h-screen bg-background">
         <Navigation />
         
-        <main className="flex-1 p-8 overflow-auto">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
           <div className="max-w-7xl mx-auto">
           {/* Header with Controls */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
             <div>
-              <h1 className="text-4xl font-bold accent-text mb-2">Dashboard</h1>
-              <p className="text-muted-foreground">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold accent-text mb-2">Dashboard</h1>
+              <p className="text-sm sm:text-base text-muted-foreground">
                 Your Team's Productivity at a Glance
               </p>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
               {/* Date Range Selector */}
-              <div className="relative flex items-center gap-2 bg-[hsl(0_0%_8%)] rounded-lg p-1">
+              <div className="relative flex items-center justify-center gap-1 sm:gap-2 bg-[hsl(0_0%_8%)] rounded-lg p-1 flex-wrap">
                 <Button
                   variant={rangeDays === 7 && !isCustomRange ? "default" : "ghost"}
                   size="sm"
+                  className="text-xs sm:text-sm px-2 sm:px-3"
                   onClick={() => handlePresetRange(7)}
                 >
                   7d
@@ -654,6 +655,7 @@ export default function DashboardPage() {
                 <Button
                   variant={rangeDays === 14 && !isCustomRange ? "default" : "ghost"}
                   size="sm"
+                  className="text-xs sm:text-sm px-2 sm:px-3"
                   onClick={() => handlePresetRange(14)}
                 >
                   14d
@@ -661,6 +663,7 @@ export default function DashboardPage() {
                 <Button
                   variant={rangeDays === 30 && !isCustomRange ? "default" : "ghost"}
                   size="sm"
+                  className="text-xs sm:text-sm px-2 sm:px-3"
                   onClick={() => handlePresetRange(30)}
                 >
                   30d
@@ -668,6 +671,7 @@ export default function DashboardPage() {
                 <Button
                   variant={rangeDays === null && !isCustomRange ? "default" : "ghost"}
                   size="sm"
+                  className="text-xs sm:text-sm px-2 sm:px-3"
                   onClick={() => handlePresetRange(null)}
                 >
                   All
@@ -675,21 +679,22 @@ export default function DashboardPage() {
                 <Button
                   variant={isCustomRange ? "default" : "ghost"}
                   size="sm"
+                  className="text-xs sm:text-sm px-2 sm:px-3"
                   onClick={() => setIsCustomDateOpen(!isCustomDateOpen)}
                 >
-                  <Calendar className="w-4 h-4 mr-1" />
-                  Custom
+                  <Calendar className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Custom</span>
                 </Button>
                 
                 {/* Custom Date Range Popup */}
                 {isCustomDateOpen && (
                   <div 
                     ref={customDatePopupRef}
-                    className="absolute top-full right-0 mt-2 z-50 glass-card border border-border rounded-lg shadow-lg p-4 min-w-[280px]"
+                    className="absolute top-full right-0 mt-2 z-50 glass-card border border-border rounded-lg shadow-lg p-3 sm:p-4 min-w-[240px] sm:min-w-[280px] max-w-[calc(100vw-2rem)]"
                   >
                     <div className="space-y-3">
                       <div>
-                        <label className="text-sm font-medium mb-1 block accent-text">
+                        <label className="text-xs sm:text-sm font-medium mb-1 block accent-text">
                           Days from Today
                         </label>
                         <Input
@@ -697,14 +702,14 @@ export default function DashboardPage() {
                           value={customDaysInput}
                           onChange={(e) => setCustomDaysInput(e.target.value)}
                           placeholder="e.g., 60d, 120d, 360d"
-                          className="bg-background font-mono"
+                          className="bg-background font-mono text-sm"
                           onKeyPress={(e) => {
                             if (e.key === "Enter") {
                               handleCustomDateRange();
                             }
                           }}
                         />
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                           Enter number of days (e.g., 60d or 60)
                         </p>
                       </div>
@@ -713,7 +718,7 @@ export default function DashboardPage() {
                           size="sm"
                           onClick={handleCustomDateRange}
                           disabled={!customDaysInput.trim()}
-                          className="flex-1"
+                          className="flex-1 text-sm"
                         >
                           Apply
                         </Button>
@@ -724,6 +729,7 @@ export default function DashboardPage() {
                             setIsCustomDateOpen(false);
                             setCustomDaysInput("");
                           }}
+                          className="text-sm"
                         >
                           Cancel
                         </Button>
@@ -737,6 +743,7 @@ export default function DashboardPage() {
               <Button
                 onClick={() => syncMutation.mutate()}
                 disabled={syncMutation.isPending}
+                className="w-full sm:w-auto text-sm"
               >
                 {syncMutation.isPending ? (
                   <>
@@ -754,26 +761,26 @@ export default function DashboardPage() {
           </div>
 
           {dashboardData?.last_synced && (
-            <div className="mb-6 text-sm text-muted-foreground flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Last synced: {new Date(dashboardData.last_synced).toLocaleString()}
+            <div className="mb-4 sm:mb-6 text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+              <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="truncate">Last synced: {new Date(dashboardData.last_synced).toLocaleString()}</span>
             </div>
           )}
 
           {/* 4 Key Metric Cards */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6 sm:mb-8">
             {/* Total Code Commitment Trend */}
             <Card className="glass-card flex flex-col h-full w-full">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-medium text-white">
+                <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? `${selectedContributor}'s Commits` : "Total Code Commitment"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
-                <div className="text-3xl font-bold accent-text mb-1">
+                <div className="text-2xl sm:text-3xl font-bold accent-text mb-1">
                   {displayMetrics.totalCommits}
                 </div>
-                <p className="text-sm text-white mb-3">Commits</p>
+                <p className="text-xs sm:text-sm text-white mb-3">Commits</p>
                 {processedDailyCommits && processedDailyCommits.length > 0 ? (
                   <div className="flex-1 min-h-[108px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -815,9 +822,9 @@ export default function DashboardPage() {
                 )}
                 <div className="mt-3 flex items-center gap-2">
                   <span className={getTrendIconColor(displayMetrics.averageTrend)}>
-                    {getTrendIcon(displayMetrics.averageTrend)}
+                    {getTrendIcon(displayMetrics.averageTrend, "w-3 h-3 sm:w-4 sm:h-4")}
                   </span>
-                  <span className="text-sm text-white">
+                  <span className="text-xs sm:text-sm text-white">
                     Average Trend: {formatAverageTrend(displayMetrics.averageTrend)}
                   </span>
                 </div>
@@ -827,12 +834,12 @@ export default function DashboardPage() {
             {/* Internal vs External Split */}
             <Card className="glass-card flex flex-col w-full">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-medium text-white">
+                <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? "Contributor Type" : "Contribution Split"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
-                <div className="flex-1 min-h-[108px] flex items-center justify-center mb-3">
+                <div className="flex-1 min-h-[100px] sm:min-h-[108px] flex items-center justify-center mb-3">
                   {pieChartData.some(d => d.value > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -903,14 +910,14 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-base text-white">Internal</span>
-                    <span className="text-lg font-bold accent-text">
+                    <span className="text-sm sm:text-base text-white">Internal</span>
+                    <span className="text-base sm:text-lg font-bold accent-text">
                       {displayMetrics.internalPercentage.toFixed(0)}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-base text-white">External</span>
-                    <span className="text-lg font-bold">
+                    <span className="text-sm sm:text-base text-white">External</span>
+                    <span className="text-base sm:text-lg font-bold">
                       {displayMetrics.externalPercentage.toFixed(0)}%
                     </span>
                   </div>
@@ -921,7 +928,7 @@ export default function DashboardPage() {
             {/* Top Contributor / Selected Contributor */}
             <Card className="glass-card flex flex-col h-full w-full">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-medium text-white">
+                <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? "Selected Contributor" : "Top Contributors"}
                 </CardTitle>
               </CardHeader>
@@ -964,7 +971,7 @@ export default function DashboardPage() {
                     {top3Contributors.map((contributor, index) => (
                       <div key={contributor.login} className="space-y-1">
                         {/* Row 1: Avatar, Name, Type, Trend */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {contributor.avatar_url ? (
                             <img 
                               src={contributor.avatar_url} 
@@ -977,27 +984,27 @@ export default function DashboardPage() {
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-sm truncate">{contributor.login}</div>
+                            <div className="font-semibold text-xs sm:text-sm truncate">{contributor.login}</div>
                           </div>
                           <Badge 
                             variant={contributor.is_internal ? "default" : "secondary"} 
-                            className="text-xs px-1.5 py-0"
+                            className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 shrink-0"
                           >
                             {contributor.is_internal ? "Internal" : "External"}
                           </Badge>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 shrink-0">
                             <span className={getTrendIconColor(contributor?.average_trend)}>
-                              {getTrendIcon(contributor?.average_trend, "w-4 h-4")}
+                              {getTrendIcon(contributor?.average_trend, "w-3 h-3 sm:w-4 sm:h-4")}
                             </span>
-                            <span className="text-sm font-bold text-white">
+                            <span className="text-xs sm:text-sm font-bold text-white">
                               {formatAverageTrend(contributor?.average_trend)}
                             </span>
                           </div>
                         </div>
                         {/* Row 2: Total Contribution */}
-                        <div className="flex items-center gap-2 pl-8">
-                          <span className="text-xs text-muted-foreground">Total Contribution:</span>
-                          <span className="text-sm font-semibold text-white">{contributor.commits} commits</span>
+                        <div className="flex items-center gap-2 pl-6 sm:pl-8 flex-wrap">
+                          <span className="text-[10px] sm:text-xs text-muted-foreground">Total Contribution:</span>
+                          <span className="text-xs sm:text-sm font-semibold text-white">{contributor.commits} commits</span>
                         </div>
                       </div>
                     ))}
@@ -1011,29 +1018,29 @@ export default function DashboardPage() {
             {/* Risk Flags Counter */}
             <Card className="glass-card flex flex-col h-full w-full min-w-0">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-medium text-white">
+                <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? `${selectedContributor}'s Risk Flags` : "Risk Flags"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
                 {/* Total and badges on same row */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-3xl font-bold accent-text">
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <div className="text-2xl sm:text-3xl font-bold accent-text">
                     {displayRiskFlags.length}
                   </div>
                   <div className="flex gap-1 flex-wrap">
                     {displayRiskFlags.filter(f => f.severity === "high").length > 0 && (
-                      <Badge variant="destructive" className="text-xs">
+                      <Badge variant="destructive" className="text-[10px] sm:text-xs">
                         {displayRiskFlags.filter(f => f.severity === "high").length} High
                       </Badge>
                     )}
                     {displayRiskFlags.filter(f => f.severity === "medium").length > 0 && (
-                      <Badge variant="default" className="text-xs">
+                      <Badge variant="default" className="text-[10px] sm:text-xs">
                         {displayRiskFlags.filter(f => f.severity === "medium").length} Med
                       </Badge>
                     )}
                     {displayRiskFlags.filter(f => f.severity === "low").length > 0 && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="secondary" className="text-[10px] sm:text-xs">
                         {displayRiskFlags.filter(f => f.severity === "low").length} Low
                       </Badge>
                     )}
@@ -1094,20 +1101,20 @@ export default function DashboardPage() {
           </div>
 
           {/* Charts Section */}
-          <div className="grid gap-6 lg:grid-cols-2 mb-8">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 mb-6 sm:mb-8">
             {/* Daily Commits Bar Chart */}
             <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Daily Commits
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate">Daily Commits</span>
                   {selectedContributor && (
-                    <Badge variant="secondary" className="ml-2">
+                    <Badge variant="secondary" className="ml-2 text-[10px] sm:text-xs shrink-0">
                       {selectedContributor}
                     </Badge>
                   )}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   {selectedContributor 
                     ? `Individual commit activity for ${selectedContributor}` 
                     : "Team commit activity over time"}
@@ -1115,22 +1122,26 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {processedDailyCommits && processedDailyCommits.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={270}>
+                  <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={processedDailyCommits}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis 
                         dataKey="date" 
                         stroke="hsl(var(--muted-foreground))"
-                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                         tickFormatter={(value) => {
                           const date = new Date(value);
                           date.setDate(date.getDate() + 1);
                           return `${date.getMonth() + 1}/${date.getDate()}`;
                         }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
                       />
                       <YAxis 
                         stroke="hsl(var(--muted-foreground))"
-                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        width={40}
                       />
                       <Tooltip 
                         contentStyle={{ 
@@ -1205,16 +1216,16 @@ export default function DashboardPage() {
             {/* Contribution Split Pie Chart */}
             <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Contribution Split
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate">Contribution Split</span>
                   {selectedContributor && (
-                    <Badge variant="secondary" className="ml-2">
+                    <Badge variant="secondary" className="ml-2 text-[10px] sm:text-xs shrink-0">
                       {selectedContributor}
                     </Badge>
                   )}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   {selectedContributor 
                     ? `${selectedContributor}'s contributions by repository` 
                     : "Team contributions broken down by repository"}
@@ -1222,8 +1233,8 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {sortedRepoContributions && sortedRepoContributions.length > 0 ? (
-                  <div className="flex items-center gap-6">
-                    <div className="shrink-0" style={{ width: 200, height: 180 }}>
+                  <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                    <div className="shrink-0" style={{ width: '100%', maxWidth: '200px', height: 180 }}>
                       <PieChart width={200} height={180}>
                           <defs>
                             {sortedRepoContributions.map((entry, index) => {
@@ -1288,7 +1299,7 @@ export default function DashboardPage() {
                           />
                         </PieChart>
                     </div>
-                    <div className="flex-1 space-y-2 max-h-[300px] overflow-y-auto">
+                    <div className="flex-1 w-full sm:w-auto space-y-2 max-h-[300px] overflow-y-auto">
                       {sortedRepoContributions.map((entry, index) => {
                         const color = `hsl(${entry.hue} ${entry.saturation} ${entry.lightness})`;
                         // Handle "External" category specially, otherwise extract repo name
@@ -1305,11 +1316,11 @@ export default function DashboardPage() {
                                 className="w-3 h-3 rounded-full shrink-0" 
                                 style={{ backgroundColor: color }}
                               />
-                              <span className="text-sm truncate">
+                              <span className="text-xs sm:text-sm truncate">
                                 {displayName}
                               </span>
                             </div>
-                            <span className="text-sm font-semibold accent-text ml-2">
+                            <span className="text-xs sm:text-sm font-semibold accent-text ml-2 shrink-0">
                               {entry.value}
                             </span>
                           </div>
@@ -1330,24 +1341,24 @@ export default function DashboardPage() {
           </div>
 
           {/* Contributors Section */}
-          <Card className="glass-card mb-8">
+          <Card className="glass-card mb-6 sm:mb-8">
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
+                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                     Contributors
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">
                     {selectedContributor ? "Individual contributor details" : "Top contributors sorted by average trend"}
                   </CardDescription>
                 </div>
-                <div className="w-64">
+                <div className="w-full sm:w-64">
                   <Select 
                     value={selectedContributor || "all"} 
                     onValueChange={(value) => setSelectedContributor(value === "all" ? null : value)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="text-sm">
                       <SelectValue placeholder="Select contributor" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1367,36 +1378,36 @@ export default function DashboardPage() {
                 /* Individual Contributor View */
                 <div className="space-y-6">
                   {/* Contributor Profile Header */}
-                  <div className="flex items-center gap-4 p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                     {selectedContributorData.avatar_url ? (
                       <img 
                         src={selectedContributorData.avatar_url} 
                         alt={selectedContributorData.login}
-                        className="w-16 h-16 rounded-full"
+                        className="w-16 h-16 rounded-full shrink-0"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
+                      <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center shrink-0">
                         <Users className="w-8 h-8" />
                       </div>
                     )}
-                    <div className="flex-1">
-                      <h3 className="text-2xl font-bold">{selectedContributorData.login}</h3>
+                    <div className="flex-1 w-full text-center sm:text-left">
+                      <h3 className="text-xl sm:text-2xl font-bold break-words">{selectedContributorData.login}</h3>
                       {selectedContributorData.name && (
-                        <p className="text-muted-foreground">{selectedContributorData.name}</p>
+                        <p className="text-sm sm:text-base text-muted-foreground break-words">{selectedContributorData.name}</p>
                       )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant={selectedContributorData.is_internal ? "default" : "secondary"}>
+                      <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 mt-2">
+                        <Badge variant={selectedContributorData.is_internal ? "default" : "secondary"} className="text-xs">
                           {selectedContributorData.is_internal ? "Internal" : "External"}
                         </Badge>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
                           <span className={getTrendIconColor(selectedContributorData?.average_trend)}>
-                            {getTrendIcon(selectedContributorData?.average_trend)}
+                            {getTrendIcon(selectedContributorData?.average_trend, "w-3 h-3 sm:w-4 sm:h-4")}
                           </span>
                           <span>Average Trend: {formatAverageTrend(selectedContributorData?.average_trend)}</span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-center sm:justify-start">
                       <Button
                         variant="outline"
                         size="icon"
@@ -1463,52 +1474,52 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Contributor Metrics Grid */}
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                  <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="p-3 sm:p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
-                        <GitCommit className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Commits</span>
+                        <GitCommit className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
+                        <span className="text-xs sm:text-sm text-muted-foreground">Commits</span>
                       </div>
-                      <div className="text-2xl font-bold accent-text">
+                      <div className="text-xl sm:text-2xl font-bold accent-text">
                         {selectedContributorData.commits}
                       </div>
                     </div>
                     
-                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                    <div className="p-3 sm:p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
-                        <GitPullRequest className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">PRs Opened</span>
+                        <GitPullRequest className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
+                        <span className="text-xs sm:text-sm text-muted-foreground">PRs Opened</span>
                       </div>
-                      <div className="text-2xl font-bold accent-text">
+                      <div className="text-xl sm:text-2xl font-bold accent-text">
                         {selectedContributorData.prs_opened}
                       </div>
                     </div>
                     
-                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                    <div className="p-3 sm:p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
-                        <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">PRs Merged</span>
+                        <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
+                        <span className="text-xs sm:text-sm text-muted-foreground">PRs Merged</span>
                       </div>
-                      <div className="text-2xl font-bold accent-text">
+                      <div className="text-xl sm:text-2xl font-bold accent-text">
                         {selectedContributorData.prs_merged}
                       </div>
                     </div>
                     
-                    <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                    <div className="p-3 sm:p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
                       <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Issues Closed</span>
+                        <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
+                        <span className="text-xs sm:text-sm text-muted-foreground">Issues Closed</span>
                       </div>
-                      <div className="text-2xl font-bold accent-text">
+                      <div className="text-xl sm:text-2xl font-bold accent-text">
                         {selectedContributorData.issues_closed}
                       </div>
                     </div>
                   </div>
 
                   {/* Contributor Performance Summary */}
-                  <div className="p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
-                    <h4 className="font-semibold mb-3">Performance Summary</h4>
-                    <div className="space-y-2 text-sm">
+                  <div className="p-3 sm:p-4 rounded-lg border border-border bg-[hsl(0_0%_8%)]">
+                    <h4 className="font-semibold mb-3 text-sm sm:text-base">Performance Summary</h4>
+                    <div className="space-y-2 text-xs sm:text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">PR Success Rate:</span>
                         <span className="font-semibold">
@@ -1543,57 +1554,60 @@ export default function DashboardPage() {
                       .map((contributor, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-4 p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)] hover:bg-[hsl(0_0%_10%)] transition-colors"
+                          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 p-3 rounded-lg border border-border bg-[hsl(0_0%_8%)] hover:bg-[hsl(0_0%_10%)] transition-colors"
                         >
-                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold">
-                            {index + 1}
-                          </div>
-                          {contributor.avatar_url ? (
-                            <img 
-                              src={contributor.avatar_url} 
-                              alt={contributor.login}
-                              className="w-10 h-10 rounded-full cursor-pointer"
-                              onClick={() => setSelectedContributor(contributor.login)}
-                            />
-                          ) : (
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                            <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-primary/20 text-primary font-bold text-xs sm:text-sm shrink-0">
+                              {index + 1}
+                            </div>
+                            {contributor.avatar_url ? (
+                              <img 
+                                src={contributor.avatar_url} 
+                                alt={contributor.login}
+                                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full cursor-pointer shrink-0"
+                                onClick={() => setSelectedContributor(contributor.login)}
+                              />
+                            ) : (
+                              <div 
+                                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-secondary flex items-center justify-center cursor-pointer shrink-0"
+                                onClick={() => setSelectedContributor(contributor.login)}
+                              >
+                                <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                              </div>
+                            )}
                             <div 
-                              className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center cursor-pointer"
+                              className="flex-1 min-w-0 cursor-pointer"
                               onClick={() => setSelectedContributor(contributor.login)}
                             >
-                              <Users className="w-5 h-5" />
-                            </div>
-                          )}
-                          <div 
-                            className="flex-1 min-w-0 cursor-pointer"
-                            onClick={() => setSelectedContributor(contributor.login)}
-                          >
-                            <div className="font-semibold">{contributor.login}</div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>{contributor.commits} commits</span>
-                              <span>•</span>
-                              <span>{contributor.prs_merged} PRs</span>
+                              <div className="font-semibold text-sm sm:text-base truncate">{contributor.login}</div>
+                              <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground flex-wrap">
+                                <span>{contributor.commits} commits</span>
+                                <span>•</span>
+                                <span>{contributor.prs_merged} PRs</span>
+                              </div>
                             </div>
                           </div>
-                          <Badge variant={contributor.is_internal ? "default" : "secondary"}>
-                            {contributor.is_internal ? "Internal" : "External"}
-                          </Badge>
-                          <div className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <span className={getTrendIconColor(contributor?.average_trend)}>
-                                {getTrendIcon(contributor?.average_trend, "w-4 h-4")}
-                              </span>
-                              <span className="font-bold accent-text text-lg">
-                                {formatAverageTrend(contributor?.average_trend)}
-                              </span>
+                          <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4">
+                            <Badge variant={contributor.is_internal ? "default" : "secondary"} className="text-[10px] sm:text-xs shrink-0">
+                              {contributor.is_internal ? "Internal" : "External"}
+                            </Badge>
+                            <div className="text-right shrink-0">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className={getTrendIconColor(contributor?.average_trend)}>
+                                  {getTrendIcon(contributor?.average_trend, "w-3 h-3 sm:w-4 sm:h-4")}
+                                </span>
+                                <span className="font-bold accent-text text-base sm:text-lg">
+                                  {formatAverageTrend(contributor?.average_trend)}
+                                </span>
+                              </div>
+                              <div className="text-[10px] sm:text-xs text-muted-foreground">trend</div>
                             </div>
-                            <div className="text-xs text-muted-foreground">trend</div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            asChild
-                            className="shrink-0"
-                          >
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              asChild
+                              className="shrink-0 h-8 w-8 sm:h-10 sm:w-10"
+                            >
                             <a
                               href={`https://github.com/${contributor.login}`}
                               target="_blank"
@@ -1601,9 +1615,10 @@ export default function DashboardPage() {
                               aria-label={`View ${contributor.login} on GitHub`}
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <GitHubIcon className="w-5 h-5" />
+                              <GitHubIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                             </a>
-                          </Button>
+                            </Button>
+                          </div>
                         </div>
                       ))}
                   </div>
@@ -1617,20 +1632,20 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-2 mb-8">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 mb-6 sm:mb-8">
             {/* Risk Flags Section */}
             <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5" />
-                  Risk Flags
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate">Risk Flags</span>
                   {selectedContributor && (
-                    <Badge variant="secondary" className="ml-2">
+                    <Badge variant="secondary" className="ml-2 text-[10px] sm:text-xs shrink-0">
                       {selectedContributor}
                     </Badge>
                   )}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   {selectedContributor 
                     ? `Alerts and warnings for ${selectedContributor}` 
                     : "Active alerts and warnings for your team"}
@@ -1780,13 +1795,13 @@ export default function DashboardPage() {
             {/* Weekly Recap */}
             <Card className="glass-card">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Calendar className="w-5 h-5" />
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                      <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
                       Weekly Recap
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-xs sm:text-sm">
                       Auto-generated team summary
                     </CardDescription>
                   </div>
@@ -1795,6 +1810,7 @@ export default function DashboardPage() {
                     size="sm"
                     onClick={handleCopyReport}
                     disabled={!weeklyReport?.text}
+                    className="w-full sm:w-auto text-sm"
                   >
                     {copied ? (
                       <>
@@ -1812,7 +1828,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {weeklyReport?.text ? (
-                  <div className="space-y-3 text-sm text-muted-foreground">
+                  <div className="space-y-3 text-xs sm:text-sm text-muted-foreground">
                     {weeklyReport.text
                       .trim()
                       .split(/\n{2,}/)

@@ -8,7 +8,7 @@ api_bp = Blueprint('api', __name__)
 def _register_routes():
     """Register routes on the blueprint."""
     try:
-        from app.api import routes
+        from . import routes
     except Exception as e:
         # If routes fail to import, log but don't fail
         # The blueprint will exist but have no routes

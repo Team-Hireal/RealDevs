@@ -63,14 +63,17 @@ def create_app(config=None):
     except Exception as e:
         # If blueprint registration fails, add a basic health endpoint
         import traceback
+        error_msg = str(e)
+        error_traceback = traceback.format_exc()
+        
         @app.route('/api/health', methods=['GET'])
         def health_fallback():
             return jsonify({
                 "status": "ok",
                 "service": "RealDevs API",
                 "note": "Running in fallback mode",
-                "error": str(e),
-                "traceback": traceback.format_exc()
+                "error": error_msg,
+                "traceback": error_traceback
             })
         
         # Also add a catch-all for other API routes

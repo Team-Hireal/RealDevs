@@ -22,7 +22,7 @@ class GitHubClient:
         }
         if pat:
             self.headers["Authorization"] = f"Bearer {pat}"
-        self.client = httpx.Client(headers=self.headers, timeout=30.0)
+        self.client = httpx.Client(headers=self.headers, timeout=30.0, follow_redirects=True)
         self.authenticated = pat is not None
     
     def __enter__(self):
