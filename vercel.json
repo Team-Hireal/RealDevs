@@ -24,18 +24,6 @@
   ],
   "routes": [
     {
-      "src": "/api/auth/pat",
-      "dest": "/app.py"
-    },
-    {
-      "src": "/api/auth/username",
-      "dest": "/app.py"
-    },
-    {
-      "src": "/api/auth/status",
-      "dest": "/app.py"
-    },
-    {
       "src": "/api/repos/selected",
       "dest": "/apps/web/api/repos.py"
     },
