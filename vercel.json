@@ -8,9 +8,41 @@
     {
       "src": "app.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "apps/web/api/auth.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "apps/web/api/repos.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "apps/web/api/dashboard.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
+    {
+      "src": "/api/auth/pat",
+      "dest": "/app.py"
+    },
+    {
+      "src": "/api/auth/username",
+      "dest": "/app.py"
+    },
+    {
+      "src": "/api/auth/status",
+      "dest": "/app.py"
+    },
+    {
+      "src": "/api/repos/selected",
+      "dest": "/apps/web/api/repos.py"
+    },
+    {
+      "src": "/api/dashboard/daily-commits",
+      "dest": "/apps/web/api/dashboard.py"
+    },
     {
       "src": "/api/(.*)",
       "dest": "/app.py"
@@ -22,6 +54,15 @@
   ],
   "functions": {
     "app.py": {
+      "maxDuration": 60
+    },
+    "apps/web/api/auth.py": {
+      "maxDuration": 60
+    },
+    "apps/web/api/repos.py": {
+      "maxDuration": 60
+    },
+    "apps/web/api/dashboard.py": {
       "maxDuration": 60
     }
   },
