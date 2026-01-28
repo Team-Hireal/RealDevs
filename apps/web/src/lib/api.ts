@@ -159,6 +159,12 @@ class ApiClient {
     })
   }
 
+  async deletePat() {
+    return this.request<{ ok: boolean; message: string }>('/auth/pat', {
+      method: 'DELETE',
+    })
+  }
+
   async submitUsername(username: string): Promise<AuthResponse> {
     return this.request<AuthResponse>('/auth/username', {
       method: 'POST',

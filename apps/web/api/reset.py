@@ -45,7 +45,8 @@ class handler(BaseHTTPRequestHandler):
                 cursor.execute("DELETE FROM repositories")
                 cursor.execute("DELETE FROM team_members")
                 cursor.execute("DELETE FROM external_contributors")
-                cursor.execute("DELETE FROM settings WHERE key != 'auth_mode'")  # Keep auth mode
+                cursor.execute("DELETE FROM auth_tokens")  # Delete PAT
+                cursor.execute("DELETE FROM settings")  # Delete all settings
                 
                 conn.commit()
                 

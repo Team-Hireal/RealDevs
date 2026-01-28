@@ -217,6 +217,15 @@ export default function CredentialsPage() {
     },
   });
 
+  const deletePatMutation = useMutation({
+    mutationFn: () => api.deletePat(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth-status"] });
+      queryClient.invalidateQueries({ queryKey: ["selected-repos"] });
+      queryClient.invalidateQueries({ queryKey: ["available-repos"] });
+    },
+  });
+
   const teamMembersMutation = useMutation({
     mutationFn: (logins: string[]) => api.updateTeamMembers(logins),
     onSuccess: () => {
@@ -568,18 +577,43 @@ export default function CredentialsPage() {
                     ) : null}
                   </div>
 
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      if (confirm("Are you sure? This will delete all local data including your PAT.")) {
-                        resetMutation.mutate();
-                      }
-                    }}
-                    className="w-full"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    {t.credentials.deletePat} & {t.common.reset} {t.common.all} {t.dashboard.title}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (confirm("Are you sure you want to delete your PAT? You will need to add it again to continue syncing.")) {
+                          deletePatMutation.mutate();
+                        }
+                      }}
+                      className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      disabled={deletePatMutation.isPending}
+                    >
+                      {deletePatMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-2" />
+                      )}
+                      {t.credentials.deletePat}
+                    </Button>
+                    
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (confirm("Are you sure? This will delete ALL data including PAT, repos, and metrics.")) {
+                          resetMutation.mutate();
+                        }
+                      }}
+                      className="w-full"
+                      disabled={resetMutation.isPending}
+                    >
+                      {resetMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-2" />
+                      )}
+                      {t.common.reset} {t.common.all} {t.dashboard.title}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">

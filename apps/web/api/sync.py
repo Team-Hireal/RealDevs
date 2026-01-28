@@ -14,7 +14,17 @@ class handler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length).decode('utf-8')
             data = json.loads(body) if body else {}
             
-            range_days = data.get('range_days', 7)
+            range_days_param = data.get('range_days', 7)
+            # Handle "all" for all-time sync (use a large range like 5 years)
+            if range_days_param == 'all' or range_days_param is None:
+                range_days = 365 * 5  # 5 years max
+            else:
+                try:
+                    range_days = int(range_days_param)
+                    if range_days < 1:
+                        range_days = 7  # Default to 7 days if invalid
+                except (ValueError, TypeError):
+                    range_days = 7  # Default to 7 days if invalid
             
             import psycopg2
             from urllib.parse import urlparse

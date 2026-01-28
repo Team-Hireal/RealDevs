@@ -158,11 +158,69 @@ class handler(BaseHTTPRequestHandler):
             }
             self._send_response(500, payload)
     
+    def do_DELETE(self):
+        """Delete stored PAT."""
+        try:
+            import psycopg2
+            
+            # Get database URL from environment
+            database_url = os.getenv("POSTGRES_URL_NON_POOLING") or os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
+            
+            if not database_url:
+                payload = {
+                    "ok": False,
+                    "error": "Database connection not configured"
+                }
+                self._send_response(500, payload)
+                return
+            
+            # Parse connection string
+            result = urlparse(database_url)
+            
+            # Connect to database
+            conn = psycopg2.connect(
+                database=result.path[1:],
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port,
+                sslmode='require'
+            )
+            
+            cursor = conn.cursor()
+            
+            try:
+                # Delete all auth tokens
+                cursor.execute("DELETE FROM auth_tokens")
+                
+                # Clear auth mode setting
+                cursor.execute("DELETE FROM settings WHERE key = 'auth_mode'")
+                
+                conn.commit()
+                print("PAT deleted successfully", file=sys.stderr)
+                
+                payload = {
+                    "ok": True,
+                    "message": "PAT deleted successfully"
+                }
+                self._send_response(200, payload)
+                
+            finally:
+                cursor.close()
+                conn.close()
+            
+        except Exception as e:
+            print(f"Error deleting PAT: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            payload = {"ok": False, "error": f"Internal server error: {str(e)}"}
+            self._send_response(500, payload)
+    
     def do_OPTIONS(self):
         """Handle CORS preflight."""
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
     

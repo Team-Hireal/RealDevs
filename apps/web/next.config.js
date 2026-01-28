@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Export as static site to avoid ISR functions counting against Vercel limit
-  output: 'export',
+  // Only export as static site in production to avoid ISR functions counting against Vercel limit
+  // In development, we need rewrites to work for API proxying
+  ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
   // Disable image optimization for static export
   images: {
     unoptimized: true,

@@ -3,34 +3,46 @@ import os
 import sys
 import traceback
 
-# Ensure we're in the correct directory
+# Get the current file's directory (apps/api/)
 current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
+# Get the project root directory (two levels up from apps/api/)
+root_dir = os.path.dirname(os.path.dirname(current_dir))
 
-# Change to the apps/api directory to ensure relative imports work
-original_cwd = os.getcwd()
+# Add apps/api to Python path so we can import the Flask app
+# This ensures we can import 'run' module
+if current_dir not in sys.path:
+    abs_path = os.path.abspath(current_dir)
+    sys.path.insert(0, abs_path)
+
+# Also add root directory to path for any cross-package imports
+if root_dir not in sys.path:
+    abs_root_path = os.path.abspath(root_dir)
+    sys.path.insert(0, abs_root_path)
+
+# Import the Flask app from run.py
 try:
-    os.chdir(current_dir)
     from run import app
-except Exception as e:
-    # If import fails, try to create a minimal error handler
-    # But first check if Flask is available
+except ImportError as e:
+    # If import fails, create a minimal error handler
+    import logging
+    logging.basicConfig(level=logging.ERROR)
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to import Flask app: {e}")
+    logger.error(traceback.format_exc())
+    
     try:
         from flask import Flask, jsonify
         error_app = Flask(__name__)
         
         @error_app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
         def error_handler(path):
-            error_msg = f"Failed to import Flask app: {str(e)}"
-            error_traceback = traceback.format_exc()
             return jsonify({
                 "ok": False,
-                "error": error_msg,
-                "traceback": error_traceback,
+                "error": f"Failed to import Flask app: {str(e)}",
+                "traceback": traceback.format_exc(),
                 "current_dir": current_dir,
-                "sys_path": sys.path[:5],  # First 5 paths
-                "cwd": os.getcwd()
+                "root_dir": root_dir,
+                "sys_path": sys.path[:5]  # First 5 paths for debugging
             }), 500
         
         app = error_app
@@ -38,9 +50,8 @@ except Exception as e:
         # If Flask itself isn't available, we can't create an error handler
         # This means dependencies aren't installed - raise the original error
         raise e
-finally:
-    os.chdir(original_cwd)
 
-# Export app for Vercel
-# Vercel automatically detects 'app' as the WSGI application
+# Export app for Vercel Python runtime
+# Vercel will detect this as the WSGI application
+# The 'app' variable must be a Flask instance at module level
 
