@@ -86,52 +86,62 @@ class MetricsService:
     @staticmethod
     def _calculate_trendline_slope(daily_scores: List[float]) -> float:
         """
-        Calculate the slope of a trendline using least squares regression.
-        
-        This uses the standard least squares method (not RMS - Root Mean Square).
-        RMS is used for error measurement, not for calculating trendline slope.
-        
-        Formula: slope = (n*Σ(xy) - Σ(x)*Σ(y)) / (n*Σ(x²) - (Σ(x))²)
-        where n = number of data points, x = day index (0, 1, 2, ...), y = daily score
-        
+        Calculate the trend using root mean square (RMS) approach.
+
+        This calculates the RMS of daily changes normalized by the mean value,
+        then applies the sign based on overall direction (first vs last value).
+
+        Formula: RMS = sqrt(Σ(changes²) / n) / mean_value
+        where changes = daily differences, n = number of days
+
         Args:
             daily_scores: List of weighted scores for each day (ordered chronologically from oldest to newest)
-        
+
         Returns:
-            The slope of the trendline. Positive values indicate upward trend,
+            The trend as a percentage (0.xx format). Positive values indicate upward trend,
             negative values indicate downward trend.
         """
         if not daily_scores or len(daily_scores) < 2:
             return 0.0
-        
+
         n = len(daily_scores)
-        # x values are day indices (0, 1, 2, ...)
-        # Day 0 is the oldest, day n-1 is the newest
-        x_values = list(range(n))
-        
-        # Calculate sums for least squares formula
-        sum_x = sum(x_values)
-        sum_y = sum(daily_scores)
-        sum_xy = sum(x * y for x, y in zip(x_values, daily_scores))
-        sum_x_squared = sum(x * x for x in x_values)
-        
-        # Least squares slope formula: slope = (n*Σ(xy) - Σ(x)*Σ(y)) / (n*Σ(x²) - (Σ(x))²)
-        # This is the standard formula for linear regression slope
-        denominator = n * sum_x_squared - sum_x * sum_x
-        if denominator == 0:
-            logger.warning(f"Trend calculation denominator is zero for {n} data points")
-            return 0.0
-        
-        slope = (n * sum_xy - sum_x * sum_y) / denominator
-        
+
+        # Calculate daily changes (differences between consecutive days)
+        changes = [daily_scores[i+1] - daily_scores[i] for i in range(n-1)]
+
+        # Calculate mean of the daily scores to use for normalization
+        mean_value = sum(daily_scores) / n
+
+        # Avoid division by zero
+        if mean_value == 0:
+            # If mean is zero, use absolute mean of changes as fallback
+            mean_value = sum(abs(c) for c in changes) / len(changes) if changes else 1.0
+            if mean_value == 0:
+                return 0.0
+
+        # Calculate RMS of changes
+        sum_of_squares = sum(change ** 2 for change in changes)
+        rms = (sum_of_squares / len(changes)) ** 0.5
+
+        # Normalize by mean value to get percentage
+        rms_percentage = rms / abs(mean_value)
+
+        # Determine direction: positive if trending up, negative if trending down
+        # Compare first and last values to determine overall direction
+        overall_change = daily_scores[-1] - daily_scores[0]
+        direction = 1 if overall_change >= 0 else -1
+
+        trend = direction * rms_percentage
+
         # Debug logging to help identify issues
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"Trend calculation: n={n}, first_score={daily_scores[0]:.2f}, "
-                f"last_score={daily_scores[-1]:.2f}, slope={slope:.4f}"
+                f"RMS Trend calculation: n={n}, first_score={daily_scores[0]:.2f}, "
+                f"last_score={daily_scores[-1]:.2f}, rms={rms:.4f}, "
+                f"mean={mean_value:.2f}, trend={trend:.4f}"
             )
-        
-        return slope
+
+        return trend
     
     @staticmethod
     def get_dashboard_data(range_days: Optional[int] = 7) -> Dict:
