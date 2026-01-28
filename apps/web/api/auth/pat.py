@@ -111,11 +111,14 @@ class handler(BaseHTTPRequestHandler):
                             cursor.execute("DELETE FROM settings WHERE key = 'github_username'")
                             
                             conn.commit()
+                            print(f"PAT stored successfully for user {user_data.get('login')}", file=sys.stderr)
                         finally:
                             cursor.close()
                             conn.close()
                 except Exception as db_error:
                     print(f"Database error: {db_error}", file=sys.stderr)
+                    import traceback
+                    traceback.print_exc(file=sys.stderr)
                     payload = {
                         "ok": False,
                         "error": f"Failed to store PAT: {str(db_error)}"

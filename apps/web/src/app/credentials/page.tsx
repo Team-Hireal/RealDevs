@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
+import { useLanguage } from "@/contexts/language-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 
 export default function CredentialsPage() {
+  const { t } = useLanguage();
   const [authMode, setAuthMode] = useState<"pat" | "username">("pat");
   const [pat, setPat] = useState("");
   const [username, setUsername] = useState("");
@@ -423,10 +425,10 @@ export default function CredentialsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Key className="w-5 h-5" />
-                GitHub Personal Access Token
+                {t.credentials.githubPat}
               </CardTitle>
               <CardDescription>
-                We will not store your PAT without your permission, your PAT will be deleted after each session
+                {t.credentials.githubPatDescription}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -435,9 +437,9 @@ export default function CredentialsPage() {
                   <div className="flex items-center gap-3 p-4 rounded-lg accent-bg accent-border border">
                     <CheckCircle className="w-5 h-5 accent-text" />
                     <div className="flex-1">
-                      <div className="font-semibold accent-text">PAT Configured</div>
+                      <div className="font-semibold accent-text">{t.credentials.patConfigured}</div>
                       <div className="text-sm text-muted-foreground">
-                        Authenticated as <span className="font-mono">{authStatus.user?.login}</span>
+                        {t.credentials.authenticatedAs} <span className="font-mono">{authStatus.user?.login}</span>
                       </div>
                     </div>
                   </div>
@@ -445,7 +447,7 @@ export default function CredentialsPage() {
                   <div className="space-y-4">
                     <div>
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-semibold">Repository Selection</h4>
+                        <h4 className="text-sm font-semibold">{t.credentials.selectedRepositories}</h4>
                         {availableRepos && availableRepos.repos.length > 0 && (
                           <div className="flex gap-2">
                             {selectedRepoFullNames.size < availableRepos.repos.length ? (
@@ -455,7 +457,7 @@ export default function CredentialsPage() {
                                 onClick={handleSelectAllRepos}
                                 className="text-xs"
                               >
-                                Select All ({availableRepos.repos.length})
+                                {t.common.select} {t.common.all} ({availableRepos.repos.length})
                               </Button>
                             ) : (
                               <Button
@@ -475,7 +477,7 @@ export default function CredentialsPage() {
                           <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3">
                             {availableRepos.repos.length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-4">
-                                No repositories found
+                                {t.dashboard.noRepositories}
                               </p>
                             ) : (
                               availableRepos.repos.map((repo) => {
@@ -511,11 +513,11 @@ export default function CredentialsPage() {
                             {selectReposMutation.isPending ? (
                               <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Saving...
+                                {t.common.saving}
                               </>
                             ) : (
                               <>
-                                Save Selected Repositories ({selectedRepoFullNames.size})
+                                {t.common.save} {t.credentials.selectedRepositories} ({selectedRepoFullNames.size})
                               </>
                             )}
                           </Button>
@@ -561,7 +563,7 @@ export default function CredentialsPage() {
                       </div>
                     ) : selectedRepos && selectedRepos.repos.length === 0 ? (
                       <div className="text-sm text-muted-foreground text-center py-2">
-                        No repositories selected. Select repositories above to start syncing.
+                        {t.credentials.noRepositoriesSelected}. {t.credentials.selectRepositories} {t.dashboard.syncNow.toLowerCase()}.
                       </div>
                     ) : null}
                   </div>
@@ -576,7 +578,7 @@ export default function CredentialsPage() {
                     className="w-full"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
-                    Delete PAT & Reset All Data
+                    {t.credentials.deletePat} & {t.common.reset} {t.common.all} {t.dashboard.title}
                   </Button>
                 </div>
               ) : (
@@ -624,7 +626,7 @@ export default function CredentialsPage() {
                   {authMode === "pat" ? (
                     <div>
                       <label className="text-sm font-medium mb-2 block">
-                        GitHub Personal Access Token
+                        {t.credentials.githubPat}
                       </label>
                       <div className="flex gap-2">
                         <div className="relative flex-1">
@@ -746,17 +748,17 @@ export default function CredentialsPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Building2 className="w-5 h-5" />
-                      Internal vs External
+                      {t.credentials.internalOrganizations}
                     </CardTitle>
                     <CardDescription>
-                      Specify which organizations are considered &quot;internal&quot; (everything else is &quot;external&quot;)
+                      {t.credentials.internalOrganizationsDescription}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {uniqueOrgs.length > 0 ? (
                       <>
                         <div className="space-y-3">
-                          <h4 className="text-sm font-semibold">Select Internal Organizations</h4>
+                          <h4 className="text-sm font-semibold">{t.credentials.internalOrganizations}</h4>
                           <div className="max-h-96 overflow-y-auto space-y-2 border rounded-lg p-3">
                             {uniqueOrgs.map((org) => {
                               const isOrgInternal = internalOrgs.includes(org);
@@ -811,7 +813,7 @@ export default function CredentialsPage() {
                                               onClick={() => handleSelectAllOrgRepos(org)}
                                               className="text-xs h-6 px-2"
                                             >
-                                              Select All
+                                              {t.common.select} {t.common.all}
                                             </Button>
                                           ) : (
                                             <Button
@@ -820,7 +822,7 @@ export default function CredentialsPage() {
                                               onClick={() => handleDeselectAllOrgRepos(org)}
                                               className="text-xs h-6 px-2"
                                             >
-                                              Deselect All
+                                              {t.common.remove} {t.common.all}
                                             </Button>
                                           )}
                                         </div>
@@ -897,7 +899,7 @@ export default function CredentialsPage() {
                             <h4 className="text-sm font-semibold mb-2">Current Configuration</h4>
                             <div className="space-y-2 text-sm">
                               <div>
-                                <span className="text-muted-foreground">Internal Organizations: </span>
+                                <span className="text-muted-foreground">{t.credentials.internalOrganizations}: </span>
                                 <span className="font-mono">{internalOrgs.join(', ')}</span>
                               </div>
                               {internalRepos.length > 0 && (
@@ -926,10 +928,10 @@ export default function CredentialsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                Internal Team Members
+                {t.credentials.teamMembers}
               </CardTitle>
               <CardDescription>
-                Add GitHub usernames of your internal team members to track their activity
+                {t.credentials.teamMembersDescription}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -937,7 +939,7 @@ export default function CredentialsPage() {
                 <Input
                   value={newMember}
                   onChange={(e) => setNewMember(e.target.value)}
-                  placeholder="GitHub username"
+                  placeholder={t.credentials.enterUsername}
                   onKeyPress={(e) => {
                     if (e.key === "Enter") {
                       handleAddMember();
@@ -949,7 +951,7 @@ export default function CredentialsPage() {
                   disabled={!newMember || teamMembersMutation.isPending}
                 >
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Add
+                  {t.common.add}
                 </Button>
               </div>
 
@@ -979,8 +981,8 @@ export default function CredentialsPage() {
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No team members added yet</p>
-                  <p className="text-sm">Add GitHub usernames above to get started</p>
+                  <p>{t.credentials.teamMembers} {t.common.none.toLowerCase()}</p>
+                  <p className="text-sm">{t.credentials.addTeamMember}</p>
                 </div>
               )}
             </CardContent>
@@ -991,11 +993,10 @@ export default function CredentialsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <UserPlus className="w-5 h-5" />
-                External Contributors
+                {t.credentials.externalContributors}
               </CardTitle>
               <CardDescription>
-                Add GitHub usernames of external contributors to track their commits to your repositories. 
-                The system will fetch all their commit history and label them as &quot;External&quot; in the dashboard.
+                {t.credentials.externalContributorsDescription}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1003,7 +1004,7 @@ export default function CredentialsPage() {
                 <Input
                   value={newExternalContributor}
                   onChange={(e) => setNewExternalContributor(e.target.value)}
-                  placeholder="GitHub username"
+                  placeholder={t.credentials.enterUsername}
                   onKeyPress={(e) => {
                     if (e.key === "Enter") {
                       handleAddExternalContributor();
@@ -1015,7 +1016,7 @@ export default function CredentialsPage() {
                   disabled={!newExternalContributor || externalContributorsMutation.isPending}
                 >
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Add
+                  {t.common.add}
                 </Button>
               </div>
 
@@ -1031,7 +1032,7 @@ export default function CredentialsPage() {
                           {login[0].toUpperCase()}
                         </div>
                         <span className="font-mono">{login}</span>
-                        <Badge variant="outline" className="text-xs">External</Badge>
+                        <Badge variant="outline" className="text-xs">{t.dashboard.external}</Badge>
                       </div>
                       <Button
                         variant="ghost"
@@ -1046,8 +1047,8 @@ export default function CredentialsPage() {
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <UserPlus className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No external contributors added yet</p>
-                  <p className="text-sm">Add GitHub usernames above to track external contributions</p>
+                  <p>{t.credentials.externalContributors} {t.common.none.toLowerCase()}</p>
+                  <p className="text-sm">{t.credentials.addExternalContributor}</p>
                 </div>
               )}
 

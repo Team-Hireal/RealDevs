@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
 import { useTheme } from "@/contexts/theme-context";
+import { useLanguage } from "@/contexts/language-context";
 import { Contributor } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ interface DashboardState {
 }
 
 export default function DashboardPage() {
+  const { t } = useLanguage();
   // Initialize state from localStorage or defaults
   const [rangeDays, setRangeDays] = useState<number | null>(() => {
     if (typeof window === "undefined") return 7;
@@ -219,11 +221,11 @@ export default function DashboardPage() {
 
   const getTrendLabel = (trend: number | undefined | null) => {
     if (trend === undefined || trend === null || isNaN(trend)) {
-      return '→ Neutral';
+      return `→ ${t.dashboard.neutral}`;
     }
-    if (trend > 0) return '↑ Positive';
-    if (trend < 0) return '↓ Negative';
-    return '→ Neutral';
+    if (trend > 0) return `↑ ${t.dashboard.positive}`;
+    if (trend < 0) return `↓ ${t.dashboard.negative}`;
+    return `→ ${t.dashboard.neutral}`;
   };
 
   const getTrendIcon = (trend: number | undefined | null, className?: string) => {
@@ -341,7 +343,10 @@ export default function DashboardPage() {
     };
     
     displayRiskFlags.forEach(flag => {
-      grouped[flag.severity].push(flag);
+      const severity = flag.severity;
+      if (severity && (severity === 'high' || severity === 'medium' || severity === 'low')) {
+        grouped[severity].push(flag);
+      }
     });
     
     return grouped;
@@ -639,9 +644,9 @@ export default function DashboardPage() {
           {/* Header with Controls */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
             <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold accent-text mb-2">Dashboard</h1>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold accent-text mb-2">{t.dashboard.title}</h1>
               <p className="text-sm sm:text-base text-muted-foreground">
-                Your Team's Productivity at a Glance
+                {t.dashboard.teamSummary}
               </p>
             </div>
 
@@ -752,12 +757,12 @@ export default function DashboardPage() {
                 {syncMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Syncing...
+                    {t.dashboard.syncing}
                   </>
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2" />
-                    Sync
+                    {t.dashboard.syncNow}
                   </>
                 )}
               </Button>
@@ -767,7 +772,7 @@ export default function DashboardPage() {
           {dashboardData?.last_synced && (
             <div className="mb-4 sm:mb-6 text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
               <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="truncate">Last synced: {new Date(dashboardData.last_synced).toLocaleString()}</span>
+              <span className="truncate">{t.dashboard.lastSynced}: {new Date(dashboardData.last_synced).toLocaleString()}</span>
             </div>
           )}
 
@@ -777,14 +782,14 @@ export default function DashboardPage() {
             <Card className="glass-card flex flex-col h-full w-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
-                  {selectedContributor ? `${selectedContributor}'s Commits` : "Total Code Commitment"}
+                  {selectedContributor ? `${selectedContributor}'s ${t.dashboard.commits}` : t.dashboard.totalCommits}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
                 <div className="text-2xl sm:text-3xl font-bold accent-text mb-1">
                   {displayMetrics.totalCommits}
                 </div>
-                <p className="text-xs sm:text-sm text-white mb-3">Commits</p>
+                <p className="text-xs sm:text-sm text-white mb-3">{t.dashboard.commits}</p>
                 {processedDailyCommits && processedDailyCommits.length > 0 ? (
                   <div className="flex-1 min-h-[108px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -829,7 +834,7 @@ export default function DashboardPage() {
                     {getTrendIcon(displayMetrics.averageTrend, "w-3 h-3 sm:w-4 sm:h-4")}
                   </span>
                   <span className="text-xs sm:text-sm text-white">
-                    Average Trend: {formatAverageTrend(displayMetrics.averageTrend)}
+                    {t.dashboard.averageTrend}: {formatAverageTrend(displayMetrics.averageTrend)}
                   </span>
                 </div>
               </CardContent>
@@ -839,7 +844,7 @@ export default function DashboardPage() {
             <Card className="glass-card flex flex-col w-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
-                  {selectedContributor ? "Contributor Type" : "Contribution Split"}
+                  {selectedContributor ? t.dashboard.contributors : t.dashboard.teamSummary}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
@@ -914,13 +919,13 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm sm:text-base text-white">Internal</span>
+                    <span className="text-sm sm:text-base text-white">{t.dashboard.internal}</span>
                     <span className="text-base sm:text-lg font-bold accent-text">
                       {displayMetrics.internalPercentage.toFixed(0)}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm sm:text-base text-white">External</span>
+                    <span className="text-sm sm:text-base text-white">{t.dashboard.external}</span>
                     <span className="text-base sm:text-lg font-bold">
                       {displayMetrics.externalPercentage.toFixed(0)}%
                     </span>
@@ -933,7 +938,7 @@ export default function DashboardPage() {
             <Card className="glass-card flex flex-col h-full w-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
-                  {selectedContributor ? "Selected Contributor" : "Top Contributors"}
+                  {selectedContributor ? t.dashboard.selectContributor : t.dashboard.contributors}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1">
@@ -954,7 +959,7 @@ export default function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold truncate">{selectedContributorData.login}</div>
                         <div className="text-xs text-muted-foreground">
-                          {selectedContributorData.is_internal ? "Internal" : "External"}
+                          {selectedContributorData.is_internal ? t.dashboard.internal : t.dashboard.external}
                         </div>
                       </div>
                     </div>
@@ -966,7 +971,7 @@ export default function DashboardPage() {
                         {formatAverageTrend(selectedContributorData?.average_trend)}
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">Average Trend</p>
+                    <p className="text-xs text-muted-foreground">{t.dashboard.averageTrend}</p>
                   </div>
                 ) : selectedContributorData && !hasSelectedContributorCommits ? (
                   null
@@ -994,7 +999,7 @@ export default function DashboardPage() {
                             variant={contributor.is_internal ? "default" : "secondary"} 
                             className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 shrink-0"
                           >
-                            {contributor.is_internal ? "Internal" : "External"}
+                            {contributor.is_internal ? t.dashboard.internal : t.dashboard.external}
                           </Badge>
                           <div className="flex items-center gap-1 shrink-0">
                             <span className={getTrendIconColor(contributor?.average_trend)}>
@@ -1014,7 +1019,7 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-muted-foreground text-sm">No contributors yet</div>
+                  <div className="text-muted-foreground text-sm">{t.dashboard.noContributors}</div>
                 )}
               </CardContent>
             </Card>
@@ -1023,7 +1028,7 @@ export default function DashboardPage() {
             <Card className="glass-card flex flex-col h-full w-full min-w-0">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
-                  {selectedContributor ? `${selectedContributor}'s Risk Flags` : "Risk Flags"}
+                  {selectedContributor ? `${selectedContributor}'s ${t.dashboard.riskFlags}` : t.dashboard.riskFlags}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
@@ -1111,7 +1116,7 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="truncate">Daily Commits</span>
+                  <span className="truncate">{t.dashboard.dailyCommits}</span>
                   {selectedContributor && (
                     <Badge variant="secondary" className="ml-2 text-[10px] sm:text-xs shrink-0">
                       {selectedContributor}
@@ -1159,7 +1164,7 @@ export default function DashboardPage() {
                       <Bar 
                         dataKey="internal" 
                         fill={`hsl(${getAccentColorHsl()})`} 
-                        name="Internal" 
+                        name={t.dashboard.internal} 
                         stackId="commits"
                         shape={(props: any) => {
                           const { x, y, width, height, payload } = props;
@@ -1200,7 +1205,7 @@ export default function DashboardPage() {
                       <Bar 
                         dataKey="external" 
                         fill="hsl(0 0% 50%)" 
-                        name="External" 
+                        name={t.dashboard.external} 
                         stackId="commits"
                         radius={[4, 4, 0, 0]}
                       />
@@ -1222,7 +1227,7 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Users className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="truncate">Contribution Split</span>
+                  <span className="truncate">{t.dashboard.teamSummary}</span>
                   {selectedContributor && (
                     <Badge variant="secondary" className="ml-2 text-[10px] sm:text-xs shrink-0">
                       {selectedContributor}
@@ -1351,7 +1356,7 @@ export default function DashboardPage() {
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                     <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Contributors
+                    {t.dashboard.contributors}
                   </CardTitle>
                   <CardDescription className="text-xs sm:text-sm">
                     {selectedContributor ? "Individual contributor details" : "Top contributors sorted by average trend"}
@@ -1366,10 +1371,10 @@ export default function DashboardPage() {
                       <SelectValue placeholder="Select contributor" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Contributors</SelectItem>
+                      <SelectItem value="all">{t.dashboard.allContributors}</SelectItem>
                       {sortedContributors.map((contributor) => (
                         <SelectItem key={contributor.login} value={contributor.login}>
-                          {contributor.login} {contributor.is_internal ? "(Internal)" : "(External)"}
+                          {contributor.login} {contributor.is_internal ? `(${t.dashboard.internal})` : `(${t.dashboard.external})`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1401,13 +1406,13 @@ export default function DashboardPage() {
                       )}
                       <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 mt-2">
                         <Badge variant={selectedContributorData.is_internal ? "default" : "secondary"} className="text-xs">
-                          {selectedContributorData.is_internal ? "Internal" : "External"}
+                          {selectedContributorData.is_internal ? t.dashboard.internal : t.dashboard.external}
                         </Badge>
                         <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
                           <span className={getTrendIconColor(selectedContributorData?.average_trend)}>
                             {getTrendIcon(selectedContributorData?.average_trend, "w-3 h-3 sm:w-4 sm:h-4")}
                           </span>
-                          <span>Average Trend: {formatAverageTrend(selectedContributorData?.average_trend)}</span>
+                          <span>{t.dashboard.averageTrend}: {formatAverageTrend(selectedContributorData?.average_trend)}</span>
                         </div>
                       </div>
                     </div>
@@ -1593,7 +1598,7 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4">
                             <Badge variant={contributor.is_internal ? "default" : "secondary"} className="text-[10px] sm:text-xs shrink-0">
-                              {contributor.is_internal ? "Internal" : "External"}
+                              {contributor.is_internal ? t.dashboard.internal : t.dashboard.external}
                             </Badge>
                             <div className="text-right shrink-0">
                               <div className="flex items-center justify-end gap-1">
@@ -1629,7 +1634,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No contributors data available</p>
+                    <p>{t.dashboard.noContributors}</p>
                   </div>
                 )
               )}
@@ -1642,7 +1647,7 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="truncate">Risk Flags</span>
+                  <span className="truncate">{t.dashboard.riskFlags}</span>
                   {selectedContributor && (
                     <Badge variant="secondary" className="ml-2 text-[10px] sm:text-xs shrink-0">
                       {selectedContributor}
@@ -1668,7 +1673,7 @@ export default function DashboardPage() {
                           <SelectTrigger>
                             <SelectValue>
                               <div className="flex items-center gap-2">
-                                <Badge variant="destructive">High</Badge>
+                                <Badge variant="destructive">{t.dashboard.highRisk}</Badge>
                                 <span>{riskFlagsBySeverity.high.length} flag{riskFlagsBySeverity.high.length !== 1 ? 's' : ''}</span>
                               </div>
                             </SelectValue>
@@ -1711,7 +1716,7 @@ export default function DashboardPage() {
                           <SelectTrigger>
                             <SelectValue>
                               <div className="flex items-center gap-2">
-                                <Badge variant="default">Medium</Badge>
+                                <Badge variant="default">{t.dashboard.mediumRisk}</Badge>
                                 <span>{riskFlagsBySeverity.medium.length} flag{riskFlagsBySeverity.medium.length !== 1 ? 's' : ''}</span>
                               </div>
                             </SelectValue>
@@ -1754,7 +1759,7 @@ export default function DashboardPage() {
                           <SelectTrigger>
                             <SelectValue>
                               <div className="flex items-center gap-2">
-                                <Badge variant="secondary">Low</Badge>
+                                <Badge variant="secondary">{t.dashboard.lowRisk}</Badge>
                                 <span>{riskFlagsBySeverity.low.length} flag{riskFlagsBySeverity.low.length !== 1 ? 's' : ''}</span>
                               </div>
                             </SelectValue>
@@ -1790,7 +1795,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>{selectedContributor ? `No risk flags for ${selectedContributor}` : "No risk flags at this time"}</p>
+                    <p>{selectedContributor ? `${t.dashboard.noRiskFlags} ${selectedContributor}` : t.dashboard.noRiskFlags}</p>
                   </div>
                 )}
               </CardContent>
@@ -1803,7 +1808,7 @@ export default function DashboardPage() {
                   <div>
                     <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                       <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-                      Weekly Recap
+                      {t.dashboard.weeklyReport}
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
                       Auto-generated team summary
@@ -1847,8 +1852,8 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
-                    <p>No report available yet</p>
-                    <p className="text-xs mt-2">Sync data to generate a report</p>
+                    <p>{t.dashboard.noReportAvailable}</p>
+                    <p className="text-xs mt-2">{t.dashboard.syncDataToGenerateReport}</p>
                   </div>
                 )}
               </CardContent>

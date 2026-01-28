@@ -5,17 +5,20 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, Key, Settings, Menu, X } from "lucide-react";
 import { ThemeSelector } from "./theme-selector";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useLanguage } from "@/contexts/language-context";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/credentials", label: "Credentials", icon: Key },
-  { href: "/settings", label: "Settings", icon: Settings },
+const getNavItems = (t: any) => [
+  { href: "/", label: t.nav.dashboard, icon: LayoutDashboard },
+  { href: "/credentials", label: t.nav.credentials, icon: Key },
+  { href: "/settings", label: t.nav.settings, icon: Settings },
 ];
 
 export function Navigation() {
+  const { t } = useLanguage();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const navItems = useMemo(() => getNavItems(t), [t]);
 
   return (
     <>
@@ -90,7 +93,7 @@ export function Navigation() {
         <ThemeSelector />
         
         <div className="text-xs text-muted-foreground text-center pt-4">
-          <p>Powered by <span className="font-semibold">Hireal Inc.</span></p>
+          <p>{t.common.poweredBy} <span className="font-semibold">Hireal Inc.</span></p>
         </div>
       </div>
       {/* https://github.com/SimonSaysGiveMeSmile */}

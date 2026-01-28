@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Navigation } from "@/components/navigation";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Settings as SettingsIcon, Save, RotateCcw, AlertTriangle, TrendingUp } from "lucide-react";
 import { ThemeSelectorCard } from "@/components/theme-selector";
+import { LanguageSelectorCard } from "@/components/language-selector";
+import { useLanguage } from "@/contexts/language-context";
 
 interface SettingItem {
   key: string;
@@ -20,65 +22,65 @@ interface SettingItem {
   unit?: string;
 }
 
-const THRESHOLD_SETTINGS: SettingItem[] = [
+const getThresholdSettings = (t: any): SettingItem[] => [
   {
     key: "threshold_no_activity_days",
-    label: "No Activity Threshold",
-    description: "Days without commits before flagging as inactive",
+    label: t.settings.noActivityThreshold,
+    description: t.settings.noActivityThresholdDescription,
     defaultValue: 3,
     min: 1,
     max: 30,
-    unit: "days"
+    unit: t.settings.days
   },
   {
     key: "threshold_stale_pr_days",
-    label: "Stale PR Threshold",
-    description: "Days before an open PR is considered stale",
+    label: t.settings.stalePrThreshold,
+    description: t.settings.stalePrThresholdDescription,
     defaultValue: 7,
     min: 1,
     max: 60,
-    unit: "days"
+    unit: t.settings.days
   },
   {
     key: "threshold_single_contributor_pct",
-    label: "Single Contributor Risk %",
-    description: "Percentage of work by one person before flagging",
+    label: t.settings.singleContributorRisk,
+    description: t.settings.singleContributorRiskDescription,
     defaultValue: 70,
     min: 50,
     max: 95,
-    unit: "%"
+    unit: t.settings.percent
   },
 ];
 
-const WEIGHT_SETTINGS: SettingItem[] = [
+const getWeightSettings = (t: any): SettingItem[] => [
   {
     key: "weight_commits",
-    label: "Commits Weight",
-    description: "Weight for commits in average trend calculation",
+    label: t.settings.commitsWeight,
+    description: t.settings.commitsWeightDescription,
     defaultValue: 1.0,
     min: 0,
     max: 5,
   },
   {
     key: "weight_prs_opened",
-    label: "PRs Opened Weight",
-    description: "Weight for opened PRs in average trend calculation",
+    label: t.settings.prsOpenedWeight,
+    description: t.settings.prsOpenedWeightDescription,
     defaultValue: 1.5,
     min: 0,
     max: 5,
   },
   {
     key: "weight_prs_merged",
-    label: "PRs Merged Weight",
-    description: "Weight for merged PRs in average trend calculation",
+    label: t.settings.prsMergedWeight,
+    description: t.settings.prsMergedWeightDescription,
     defaultValue: 2.0,
     min: 0,
     max: 5,
   },
   {
     key: "weight_issues_closed",
-    label: "Issues Closed Weight",
-    description: "Weight for closed issues in average trend calculation",
+    label: t.settings.issuesClosedWeight,
+    description: t.settings.issuesClosedWeightDescription,
     defaultValue: 1.0,
     min: 0,
     max: 5,
@@ -86,9 +88,13 @@ const WEIGHT_SETTINGS: SettingItem[] = [
 ];
 
 export default function SettingsPage() {
+  const { t } = useLanguage();
   const [values, setValues] = useState<Record<string, number>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const queryClient = useQueryClient();
+
+  const THRESHOLD_SETTINGS = useMemo(() => getThresholdSettings(t), [t]);
+  const WEIGHT_SETTINGS = useMemo(() => getWeightSettings(t), [t]);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["settings"],
@@ -209,9 +215,9 @@ export default function SettingsPage() {
         </div>
         
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-          <span>Min: {setting.min}</span>
-          <span>Default: {setting.defaultValue}</span>
-          <span>Max: {setting.max}</span>
+          <span>{t.settings.min}: {setting.min}</span>
+          <span>{t.settings.default}: {setting.defaultValue}</span>
+          <span>{t.settings.max}: {setting.max}</span>
         </div>
       </div>
     );
@@ -225,9 +231,9 @@ export default function SettingsPage() {
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-4xl font-bold accent-text mb-2">Settings</h1>
+              <h1 className="text-4xl font-bold accent-text mb-2">{t.settings.title}</h1>
               <p className="text-muted-foreground">
-                Configure risk thresholds and average trend calculation weights
+                {t.settings.description}
               </p>
             </div>
 
@@ -238,7 +244,7 @@ export default function SettingsPage() {
                   onClick={handleReset}
                 >
                   <RotateCcw className="w-4 h-4 mr-2" />
-                  Reset to Defaults
+                  {t.settings.resetToDefaults}
                 </Button>
               )}
               <Button
@@ -246,7 +252,7 @@ export default function SettingsPage() {
                 disabled={!hasChanges || updateMutation.isPending}
               >
                 <Save className="w-4 h-4 mr-2" />
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                {updateMutation.isPending ? t.common.saving : t.settings.saveChanges}
               </Button>
             </div>
           </div>
@@ -258,6 +264,9 @@ export default function SettingsPage() {
             </div>
           ) : (
             <>
+              {/* Language Selector */}
+              <LanguageSelectorCard className="mb-8" />
+              
               {/* Theme Selector */}
               <ThemeSelectorCard className="mb-8" />
               
@@ -266,10 +275,10 @@ export default function SettingsPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5" />
-                    Risk Flag Thresholds
+                    {t.settings.riskFlagThresholds}
                   </CardTitle>
                   <CardDescription>
-                    Configure when alerts should be triggered based on team activity
+                    {t.settings.riskFlagThresholdsDescription}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -282,28 +291,26 @@ export default function SettingsPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5" />
-                    Average Trend Weights
+                    {t.settings.averageTrendWeights}
                   </CardTitle>
                   <CardDescription>
-                    Adjust the importance of different metrics in the average trend calculation
+                    {t.settings.averageTrendWeightsDescription}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {WEIGHT_SETTINGS.map(renderSettingControl)}
                   
                   <div className="mt-6 p-4 rounded-lg accent-bg accent-border border">
-                    <h4 className="font-semibold accent-text mb-2">How Average Trend Works</h4>
+                    <h4 className="font-semibold accent-text mb-2">{t.settings.howAverageTrendWorks}</h4>
                     <p className="text-sm text-muted-foreground">
-                      Daily Weighted Score = (Commits × {values.weight_commits || 1.0}) + 
-                      (PRs Opened × {values.weight_prs_opened || 1.5}) + 
-                      (PRs Merged × {values.weight_prs_merged || 2.0}) + 
-                      (Issues Closed × {values.weight_issues_closed || 1.0})
+                      {t.settings.averageTrendFormula
+                        .replace("{commits}", (values.weight_commits || 1.0).toString())
+                        .replace("{prsOpened}", (values.weight_prs_opened || 1.5).toString())
+                        .replace("{prsMerged}", (values.weight_prs_merged || 2.0).toString())
+                        .replace("{issuesClosed}", (values.weight_issues_closed || 1.0).toString())}
                     </p>
                     <p className="text-sm text-muted-foreground mt-2">
-                      The average trend is calculated using least squares regression on daily weighted scores over time.
-                      A positive trend indicates increasing activity, negative indicates decreasing activity.
-                      Higher weights give more importance to that metric. Merged PRs typically have the highest weight
-                      as they represent completed, reviewed work.
+                      {t.settings.averageTrendExplanation}
                     </p>
                   </div>
                 </CardContent>
