@@ -50,6 +50,19 @@ class handler(BaseHTTPRequestHandler):
             else:
                 start_date = datetime.now(timezone.utc) - timedelta(days=range_days)
 
+            # Get internal organizations and repos from settings
+            cursor.execute("SELECT value FROM settings WHERE key = 'internal_organizations' LIMIT 1")
+            orgs_row = cursor.fetchone()
+            internal_orgs = json.loads(orgs_row[0]) if orgs_row and orgs_row[0] else []
+            
+            cursor.execute("SELECT value FROM settings WHERE key = 'internal_repos' LIMIT 1")
+            repos_row = cursor.fetchone()
+            internal_repos_setting = json.loads(repos_row[0]) if repos_row and repos_row[0] else []
+            
+            # Convert to lowercase for case-insensitive comparison
+            internal_orgs_lower = [org.lower() for org in internal_orgs]
+            internal_repos_lower = [repo.lower() for repo in internal_repos_setting]
+
             # Build query conditions
             conditions = ["ds.date >= %s"]
             params = [start_date]
@@ -60,42 +73,53 @@ class handler(BaseHTTPRequestHandler):
 
             where_clause = " AND ".join(conditions)
 
-            # Get daily commits grouped by date
+            # Get daily commits with repo information
             cursor.execute(f"""
                 SELECT
                     ds.date,
-                    SUM(ds.commits_count) as total_commits,
-                    SUM(CASE WHEN c.is_team_member THEN ds.commits_count ELSE 0 END) as internal_commits,
-                    SUM(CASE WHEN NOT c.is_team_member OR c.is_team_member IS NULL THEN ds.commits_count ELSE 0 END) as external_commits
+                    ds.commits_count,
+                    r.owner,
+                    r.full_name
                 FROM daily_stats ds
                 JOIN contributors c ON ds.contributor_id = c.id
+                JOIN repositories r ON ds.repo_id = r.id
                 WHERE {where_clause}
-                GROUP BY ds.date
                 ORDER BY ds.date
             """, params)
 
-            daily_commits = []
+            # Aggregate by date and classify as internal/external
+            from collections import defaultdict
+            daily_data = defaultdict(lambda: {"total": 0, "internal": 0, "external": 0})
+            
             for row in cursor.fetchall():
-                daily_commits.append({
-                    "date": row[0].strftime("%Y-%m-%d") if hasattr(row[0], 'strftime') else str(row[0])[:10],
-                    "commits": row[1] or 0,
-                    "internal": row[2] or 0,
-                    "external": row[3] or 0
-                })
+                date = row[0].strftime("%Y-%m-%d") if hasattr(row[0], 'strftime') else str(row[0])[:10]
+                commits = row[1] or 0
+                owner = row[2].lower() if row[2] else ""
+                full_name = row[3].lower() if row[3] else ""
+                
+                # Check if repo is internal
+                is_internal = owner in internal_orgs_lower or full_name in internal_repos_lower
+                
+                daily_data[date]["total"] += commits
+                if is_internal:
+                    daily_data[date]["internal"] += commits
+                else:
+                    daily_data[date]["external"] += commits
+            
+            # Convert to list format
+            daily_commits = [
+                {
+                    "date": date,
+                    "commits": data["total"],
+                    "internal": data["internal"],
+                    "external": data["external"]
+                }
+                for date, data in sorted(daily_data.items())
+            ]
 
-            # Get internal/external split
-            cursor.execute(f"""
-                SELECT
-                    SUM(CASE WHEN c.is_team_member THEN ds.commits_count ELSE 0 END) as internal,
-                    SUM(CASE WHEN NOT c.is_team_member OR c.is_team_member IS NULL THEN ds.commits_count ELSE 0 END) as external
-                FROM daily_stats ds
-                JOIN contributors c ON ds.contributor_id = c.id
-                WHERE {where_clause}
-            """, params)
-
-            split_row = cursor.fetchone()
-            internal_total = split_row[0] or 0
-            external_total = split_row[1] or 0
+            # Calculate total internal/external split
+            internal_total = sum(d["internal"] for d in daily_commits)
+            external_total = sum(d["external"] for d in daily_commits)
 
             internal_external_split = [
                 {"category": "Internal", "count": internal_total},
@@ -106,23 +130,31 @@ class handler(BaseHTTPRequestHandler):
             cursor.execute(f"""
                 SELECT
                     r.full_name,
-                    SUM(ds.commits_count) as commits,
-                    CASE WHEN SUM(CASE WHEN c.is_team_member THEN ds.commits_count ELSE 0 END) > SUM(CASE WHEN NOT c.is_team_member OR c.is_team_member IS NULL THEN ds.commits_count ELSE 0 END) THEN 'internal' ELSE 'external' END as type
+                    r.owner,
+                    SUM(ds.commits_count) as commits
                 FROM daily_stats ds
                 JOIN contributors c ON ds.contributor_id = c.id
                 JOIN repositories r ON ds.repo_id = r.id
                 WHERE {where_clause}
-                GROUP BY r.id, r.full_name
+                GROUP BY r.id, r.full_name, r.owner
                 ORDER BY commits DESC
                 LIMIT 10
             """, params)
 
             repo_contributions = []
             for row in cursor.fetchall():
+                full_name = row[0]
+                owner = row[1].lower() if row[1] else ""
+                full_name_lower = full_name.lower() if full_name else ""
+                commits = row[2]
+                
+                # Determine if repo is internal
+                is_internal = owner in internal_orgs_lower or full_name_lower in internal_repos_lower
+                
                 repo_contributions.append({
-                    "name": row[0],
-                    "value": row[1],
-                    "type": row[2]
+                    "name": full_name,
+                    "value": commits,
+                    "type": "internal" if is_internal else "external"
                 })
 
             return {

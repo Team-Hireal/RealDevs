@@ -779,7 +779,7 @@ export default function DashboardPage() {
           {/* 4 Key Metric Cards */}
           <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6 sm:mb-8">
             {/* Total Code Commitment Trend */}
-            <Card className="glass-card flex flex-col h-full w-full">
+            <Card className="glass-card flex flex-col h-full w-full min-h-[320px]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? `${selectedContributor}'s ${t.dashboard.commits}` : t.dashboard.totalCommits}
@@ -841,7 +841,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Internal vs External Split */}
-            <Card className="glass-card flex flex-col w-full">
+            <Card className="glass-card flex flex-col h-full w-full min-h-[320px]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? t.dashboard.contributors : t.dashboard.teamSummary}
@@ -935,7 +935,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Top Contributor / Selected Contributor */}
-            <Card className="glass-card flex flex-col h-full w-full">
+            <Card className="glass-card flex flex-col h-full w-full min-h-[320px]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? t.dashboard.selectContributor : t.dashboard.contributors}
@@ -1025,7 +1025,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Risk Flags Counter */}
-            <Card className="glass-card flex flex-col h-full w-full min-w-0">
+            <Card className="glass-card flex flex-col h-full w-full min-w-0 min-h-[320px]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm sm:text-base font-medium text-white">
                   {selectedContributor ? `${selectedContributor}'s ${t.dashboard.riskFlags}` : t.dashboard.riskFlags}

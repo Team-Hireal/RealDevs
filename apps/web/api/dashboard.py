@@ -98,18 +98,47 @@ class handler(BaseHTTPRequestHandler):
             """, (start_date,))
             total_commits = cursor.fetchone()[0] or 0
 
-            # Calculate internal vs external commits based on is_team_member flag
+            # Get internal organizations and repos from settings
+            cursor.execute("SELECT value FROM settings WHERE key = 'internal_organizations' LIMIT 1")
+            orgs_row = cursor.fetchone()
+            internal_orgs = json.loads(orgs_row[0]) if orgs_row and orgs_row[0] else []
+            
+            cursor.execute("SELECT value FROM settings WHERE key = 'internal_repos' LIMIT 1")
+            repos_row = cursor.fetchone()
+            internal_repos_setting = json.loads(repos_row[0]) if repos_row and repos_row[0] else []
+            
+            # Build internal/external calculation based on repo internal status
+            # A repo is internal if its owner is in internal_orgs OR its full_name is in internal_repos
+            # Convert lists to lowercase for case-insensitive comparison
+            internal_orgs_lower = [org.lower() for org in internal_orgs]
+            internal_repos_lower = [repo.lower() for repo in internal_repos_setting]
+            
+            # Get all commits and classify them
             cursor.execute("""
                 SELECT 
-                    SUM(CASE WHEN c.is_team_member = TRUE THEN ds.commits_count ELSE 0 END) as internal,
-                    SUM(CASE WHEN c.is_team_member = FALSE OR c.is_team_member IS NULL THEN ds.commits_count ELSE 0 END) as external
+                    ds.commits_count,
+                    r.owner,
+                    r.full_name
                 FROM daily_stats ds
-                JOIN contributors c ON ds.contributor_id = c.id
+                JOIN repositories r ON ds.repo_id = r.id
                 WHERE ds.date >= %s
             """, (start_date,))
-            split_row = cursor.fetchone()
-            internal_commits = split_row[0] or 0
-            external_commits = split_row[1] or 0
+            
+            internal_commits = 0
+            external_commits = 0
+            
+            for row in cursor.fetchall():
+                commit_count = row[0]
+                owner = row[1].lower() if row[1] else ""
+                full_name = row[2].lower() if row[2] else ""
+                
+                # Check if repo is internal
+                is_internal = owner in internal_orgs_lower or full_name in internal_repos_lower
+                
+                if is_internal:
+                    internal_commits += commit_count
+                else:
+                    external_commits += commit_count
             
             # Calculate percentages
             total = internal_commits + external_commits
@@ -178,16 +207,17 @@ class handler(BaseHTTPRequestHandler):
                     "last_active": row[5].isoformat() if row[5] else None
                 })
 
-            # Get top contributors with all needed fields
+            # Get top contributors aggregated across all repos (by login, not by contributor.id)
+            # This prevents duplicate entries for the same person across different repos
             cursor.execute("""
                 SELECT
                     c.login,
-                    c.name,
-                    c.avatar_url,
-                    c.is_team_member,
-                    c.linkedin_url,
-                    c.twitter_url,
-                    c.website_url,
+                    MAX(c.name) as name,
+                    MAX(c.avatar_url) as avatar_url,
+                    BOOL_OR(c.is_team_member) as is_team_member,
+                    MAX(c.linkedin_url) as linkedin_url,
+                    MAX(c.twitter_url) as twitter_url,
+                    MAX(c.website_url) as website_url,
                     SUM(d.commits_count) as commits,
                     SUM(COALESCE(d.prs_opened, 0)) as prs_opened,
                     SUM(COALESCE(d.prs_merged, 0)) as prs_merged,
@@ -196,8 +226,7 @@ class handler(BaseHTTPRequestHandler):
                 FROM contributors c
                 JOIN daily_stats d ON c.id = d.contributor_id
                 WHERE d.date >= %s
-                GROUP BY c.id, c.login, c.name, c.avatar_url, c.is_team_member, 
-                         c.linkedin_url, c.twitter_url, c.website_url
+                GROUP BY c.login
                 ORDER BY commits DESC
             """, (start_date,))
             contributor_rows = cursor.fetchall()
@@ -248,12 +277,83 @@ class handler(BaseHTTPRequestHandler):
             cursor.execute("SELECT MAX(last_synced_at) FROM repositories")
             last_synced = cursor.fetchone()[0]
 
-            # Risk flags (simplified)
+            # Generate risk flags based on metrics
             risk_flags = []
+            
+            # Check for no commit data
             if total_commits == 0:
-                risk_flags.append("No commit data available - try syncing repositories")
-            elif range_days and range_days >= 30 and average_trend < -50:
-                risk_flags.append("Significant decline in commit activity")
+                risk_flags.append({
+                    "type": "no_data",
+                    "severity": "high",
+                    "title": "No Commit Data",
+                    "description": "No commit data available. Try syncing repositories to populate the dashboard.",
+                    "repo": None,
+                    "contributor": None
+                })
+            
+            # Check for significant decline in activity
+            if range_days and range_days >= 14 and average_trend < -50:
+                risk_flags.append({
+                    "type": "activity_decline",
+                    "severity": "high",
+                    "title": "Significant Activity Decline",
+                    "description": f"Team activity has declined by {abs(average_trend):.1f}% over the past {range_days} days.",
+                    "repo": None,
+                    "contributor": None
+                })
+            elif range_days and range_days >= 14 and average_trend < -25:
+                risk_flags.append({
+                    "type": "activity_decline",
+                    "severity": "medium",
+                    "title": "Activity Decline",
+                    "description": f"Team activity has declined by {abs(average_trend):.1f}% over the past {range_days} days.",
+                    "repo": None,
+                    "contributor": None
+                })
+            
+            # Check for inactive contributors (no commits in last 7 days)
+            if range_days and range_days >= 7:
+                recent_date = datetime.now(timezone.utc) - timedelta(days=7)
+                for contributor in contributors:
+                    if contributor.get("last_commit"):
+                        last_commit_date = datetime.fromisoformat(contributor["last_commit"].replace('Z', '+00:00'))
+                        if last_commit_date < recent_date:
+                            risk_flags.append({
+                                "type": "inactive_contributor",
+                                "severity": "low",
+                                "title": "Inactive Contributor",
+                                "description": f"{contributor['login']} has not committed in the past 7 days.",
+                                "repo": None,
+                                "contributor": contributor["login"]
+                            })
+            
+            # Check for contributors with negative trends
+            for contributor in contributors:
+                trend = contributor.get("average_trend", 0)
+                if trend < -50:
+                    risk_flags.append({
+                        "type": "contributor_decline",
+                        "severity": "medium",
+                        "title": "Contributor Activity Decline",
+                        "description": f"{contributor['login']}'s activity has declined by {abs(trend):.1f}%.",
+                        "repo": None,
+                        "contributor": contributor["login"]
+                    })
+            
+            # Check for repos with no recent activity
+            for repo_summary in repo_summaries:
+                if repo_summary.get("days_active", 0) == 0:
+                    risk_flags.append({
+                        "type": "inactive_repo",
+                        "severity": "low",
+                        "title": "Inactive Repository",
+                        "description": f"No activity detected in {repo_summary['full_name']}.",
+                        "repo": repo_summary["full_name"],
+                        "contributor": None
+                    })
+            
+            # Limit to top 20 risk flags
+            risk_flags = risk_flags[:20]
 
             return {
                 "team_summary": {
