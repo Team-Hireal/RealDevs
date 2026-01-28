@@ -61,13 +61,15 @@ class handler(BaseHTTPRequestHandler):
             
             try:
                 # Get PAT from database
-                cursor.execute("SELECT encrypted_token FROM auth_tokens LIMIT 1")
+                cursor.execute("SELECT encrypted_token, github_user_login FROM auth_tokens LIMIT 1")
                 auth_row = cursor.fetchone()
                 
                 if not auth_row or not auth_row[0]:
+                    print("No PAT found in auth_tokens table", file=sys.stderr)
                     payload = {
                         "ok": False,
                         "error": "No PAT configured. Please add a Personal Access Token first.",
+                        "debug": "auth_tokens table is empty",
                         "stats": {
                             "repos_synced": 0,
                             "total_commits": 0,
@@ -77,20 +79,40 @@ class handler(BaseHTTPRequestHandler):
                     self._send_response(400, payload)
                     return
                 
+                print(f"Found PAT for user: {auth_row[1]}", file=sys.stderr)
+                
                 # Decrypt PAT
-                secret_key = os.getenv("HIDEVS_SECRET_KEY", "dev-secret-change-in-production")
-                key = base64.urlsafe_b64encode(hashlib.sha256(secret_key.encode()).digest())
-                f = Fernet(key)
-                pat = f.decrypt(auth_row[0].encode()).decode()
+                try:
+                    secret_key = os.getenv("HIDEVS_SECRET_KEY", "dev-secret-change-in-production")
+                    key = base64.urlsafe_b64encode(hashlib.sha256(secret_key.encode()).digest())
+                    f = Fernet(key)
+                    pat = f.decrypt(auth_row[0].encode()).decode()
+                    print("PAT decrypted successfully", file=sys.stderr)
+                except Exception as decrypt_error:
+                    print(f"PAT decryption failed: {decrypt_error}", file=sys.stderr)
+                    payload = {
+                        "ok": False,
+                        "error": "Failed to decrypt PAT. The encryption key may have changed.",
+                        "debug": str(decrypt_error),
+                        "stats": {
+                            "repos_synced": 0,
+                            "total_commits": 0,
+                            "total_prs": 0
+                        }
+                    }
+                    self._send_response(500, payload)
+                    return
                 
                 # Get selected repositories
                 cursor.execute("SELECT id, github_id, full_name, owner, name, default_branch FROM repositories")
                 repos = cursor.fetchall()
                 
                 if not repos:
+                    print("No repos found in repositories table", file=sys.stderr)
                     payload = {
                         "ok": False,
                         "error": "No repos selected. Please select repositories first.",
+                        "debug": "repositories table is empty",
                         "stats": {
                             "repos_synced": 0,
                             "total_commits": 0,
@@ -99,6 +121,8 @@ class handler(BaseHTTPRequestHandler):
                     }
                     self._send_response(400, payload)
                     return
+                
+                print(f"Found {len(repos)} repos to sync", file=sys.stderr)
                 
                 # Calculate date range
                 until = datetime.now(timezone.utc)
