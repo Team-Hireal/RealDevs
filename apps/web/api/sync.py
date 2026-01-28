@@ -267,6 +267,38 @@ class handler(BaseHTTPRequestHandler):
                         conn.rollback()
                         continue
                 
+                # Update is_team_member flag on all contributors based on team_members table
+                try:
+                    # First, get all team member logins
+                    cursor.execute("SELECT github_login FROM team_members")
+                    team_member_logins = [row[0].lower() for row in cursor.fetchall()]
+                    
+                    if team_member_logins:
+                        # Update contributors who are team members
+                        cursor.execute(
+                            "UPDATE contributors SET is_team_member = TRUE, updated_at = NOW() "
+                            "WHERE LOWER(login) = ANY(%s)",
+                            (team_member_logins,)
+                        )
+                        # Update contributors who are not team members
+                        cursor.execute(
+                            "UPDATE contributors SET is_team_member = FALSE, updated_at = NOW() "
+                            "WHERE LOWER(login) != ALL(%s) OR is_team_member IS NULL",
+                            (team_member_logins,)
+                        )
+                    else:
+                        # No team members configured, mark all as external
+                        cursor.execute(
+                            "UPDATE contributors SET is_team_member = FALSE, updated_at = NOW() "
+                            "WHERE is_team_member IS NULL OR is_team_member = TRUE"
+                        )
+                    
+                    conn.commit()
+                    print(f"Updated team member flags for {len(team_member_logins)} team members", file=sys.stderr)
+                except Exception as e:
+                    print(f"Error updating team member flags: {e}", file=sys.stderr)
+                    conn.rollback()
+                
                 result = {
                     "ok": len(failed_repos) == 0,
                     "synced_repos": synced_repos,

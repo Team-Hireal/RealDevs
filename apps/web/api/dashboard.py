@@ -98,15 +98,27 @@ class handler(BaseHTTPRequestHandler):
             """, (start_date,))
             total_commits = cursor.fetchone()[0] or 0
 
-            # For now, we'll use commits_count as total (internal/external split requires additional logic)
-            # This matches the original schema which doesn't have internal_commits/external_commits columns
-            internal_commits = total_commits  # Placeholder - would need contributor.is_team_member logic
-            external_commits = 0  # Placeholder
+            # Calculate internal vs external commits based on is_team_member flag
+            cursor.execute("""
+                SELECT 
+                    SUM(CASE WHEN c.is_team_member = TRUE THEN ds.commits_count ELSE 0 END) as internal,
+                    SUM(CASE WHEN c.is_team_member = FALSE OR c.is_team_member IS NULL THEN ds.commits_count ELSE 0 END) as external
+                FROM daily_stats ds
+                JOIN contributors c ON ds.contributor_id = c.id
+                WHERE ds.date >= %s
+            """, (start_date,))
+            split_row = cursor.fetchone()
+            internal_commits = split_row[0] or 0
+            external_commits = split_row[1] or 0
             
             # Calculate percentages
-            total = total_commits
-            internal_percentage = 100.0 if total > 0 else 0
-            external_percentage = 0.0
+            total = internal_commits + external_commits
+            if total > 0:
+                internal_percentage = (internal_commits / total) * 100
+                external_percentage = (external_commits / total) * 100
+            else:
+                internal_percentage = 0.0
+                external_percentage = 0.0
 
             # Get PR and issue stats (placeholder for now)
             total_prs_opened = 0
@@ -166,30 +178,71 @@ class handler(BaseHTTPRequestHandler):
                     "last_active": row[5].isoformat() if row[5] else None
                 })
 
-            # Get top contributors
+            # Get top contributors with all needed fields
             cursor.execute("""
                 SELECT
                     c.login,
                     c.name,
+                    c.avatar_url,
+                    c.is_team_member,
+                    c.linkedin_url,
+                    c.twitter_url,
+                    c.website_url,
                     SUM(d.commits_count) as commits,
+                    SUM(COALESCE(d.prs_opened, 0)) as prs_opened,
+                    SUM(COALESCE(d.prs_merged, 0)) as prs_merged,
+                    SUM(COALESCE(d.issues_closed, 0)) as issues_closed,
                     MAX(d.date) as last_commit
                 FROM contributors c
                 JOIN daily_stats d ON c.id = d.contributor_id
                 WHERE d.date >= %s
-                GROUP BY c.id, c.login, c.name
+                GROUP BY c.id, c.login, c.name, c.avatar_url, c.is_team_member, 
+                         c.linkedin_url, c.twitter_url, c.website_url
                 ORDER BY commits DESC
-                LIMIT 10
             """, (start_date,))
             contributor_rows = cursor.fetchall()
 
             contributors = []
             for row in contributor_rows:
                 contributors.append({
-                    "github_login": row[0],
+                    "login": row[0],
                     "name": row[1] or row[0],
-                    "commits": row[2],
-                    "last_commit": row[3].isoformat() if row[3] else None
+                    "avatar_url": row[2],
+                    "is_internal": row[3] == True,  # is_team_member -> is_internal
+                    "linkedin_url": row[4],
+                    "twitter_url": row[5],
+                    "website_url": row[6],
+                    "commits": row[7] or 0,
+                    "prs_opened": row[8] or 0,
+                    "prs_merged": row[9] or 0,
+                    "issues_closed": row[10] or 0,
+                    "average_trend": 0.0,  # Will calculate below
+                    "last_commit": row[11].isoformat() if row[11] else None
                 })
+            
+            # Calculate average_trend for each contributor
+            # Trend = compare recent half of period to first half
+            if range_days and range_days >= 2:
+                mid_date = start_date + timedelta(days=range_days//2)
+                for contributor in contributors:
+                    cursor.execute("""
+                        SELECT 
+                            SUM(CASE WHEN d.date < %s THEN d.commits_count ELSE 0 END) as first_half,
+                            SUM(CASE WHEN d.date >= %s THEN d.commits_count ELSE 0 END) as second_half
+                        FROM daily_stats d
+                        JOIN contributors c ON d.contributor_id = c.id
+                        WHERE c.login = %s AND d.date >= %s
+                    """, (mid_date, mid_date, contributor["login"], start_date))
+                    trend_row = cursor.fetchone()
+                    if trend_row:
+                        first_half = trend_row[0] or 0
+                        second_half = trend_row[1] or 0
+                        if first_half > 0:
+                            contributor["average_trend"] = round(((second_half - first_half) / first_half) * 100, 2)
+                        elif second_half > 0:
+                            contributor["average_trend"] = 100.0  # New activity
+                        else:
+                            contributor["average_trend"] = 0.0
 
             # Get last synced time
             cursor.execute("SELECT MAX(last_synced_at) FROM repositories")
