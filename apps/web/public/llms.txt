@@ -1,0 +1,15 @@
+# RealDevs
+
+> RealDevs is a team trend analytics dashboard for engineering team leads and startup founders: it tracks GitHub activity to show team momentum and flag risks, without surveillance.
+
+RealDevs connects to GitHub (with a personal access token for full access, or a GitHub username for public data only) and summarizes commits, pull requests and contributions across your repositories. It shows commit trends, internal vs external contribution splits, top contributors, daily commit activity, repository-level breakdowns, and risk flags such as inactive members, single points of failure and stale repositories. It can generate neutral weekly recaps. It is designed local-first and can also run on your own machine with Docker. Powered by Hireal Inc.
+
+## Pages
+- [Home / Dashboard](https://www.realdevs.pro/): team momentum dashboard with trends, contributors and risk flags
+- [Credentials](https://www.realdevs.pro/credentials): connect GitHub access (token or username) and manage team members
+- [Settings](https://www.realdevs.pro/settings): configure risk thresholds and trend calculation weights
+
+## About
+- [Made by Simon Tian](https://www.hisimon.pro): engineer and founder who builds AI products, apps and games
+- [More apps by Simon Tian](https://www.hisimon.pro/projects)
+- [Source code](https://github.com/Team-Hireal/RealDevs)
