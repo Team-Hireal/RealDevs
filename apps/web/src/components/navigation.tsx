@@ -60,7 +60,7 @@ export function Navigation() {
             height={32} 
             className="w-8 h-8 object-contain"
           />
-          <h1 className="text-2xl font-bold accent-text">RealDevs</h1>
+          <div className="text-2xl font-bold accent-text">RealDevs</div>
         </Link>
         
       </div>
